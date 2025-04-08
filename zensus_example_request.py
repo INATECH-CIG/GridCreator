@@ -1,5 +1,10 @@
 '''
 Zensus Abfrage
+
+requirements:
+Have an anvironment ready with pandas and numpy
+Do pip install pystatis
+Have an account ready at HZensusn 
 '''
 #%%
 #import pandas as pd
