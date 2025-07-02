@@ -7,6 +7,8 @@ import geopandas as gpd
 import pandas as pd
 # import openpyxl # für pycity erforderlich
 import functions as func
+import grid_creation as gc
+import pypsa
 
 
 
@@ -20,10 +22,15 @@ Koordinaten in WGS84 System
 """
 
 
-top =  48.001143  # Upper latitude
-bottom = 47.997224  # Lower latitude
-left =  7.837898   # Right longitude
-right =  7.838992  # Left longitude
+# top =  48.001143  # Upper latitude
+# bottom = 47.997224  # Lower latitude
+# left =  7.837898   # Right longitude
+# right =  7.838992  # Left longitude
+
+top =  49.4616852 + 0.00045 # ca. 49.4621352  # Upper latitude
+bottom = 49.4616852 - 0.00045 # ca. 49.4612352  # Lower latitude
+left =  11.3987696 - 0.0007  # ca. 11.3980696   # Right longitude
+right =  11.3987696 + 0.0007  # ca. 11.3994696  # Left longitude#
 bbox = [left, bottom, right, top]
 
 Area = ox.graph_from_bbox(top, bottom, right, left, network_type="all")
@@ -79,6 +86,32 @@ print(gpd_area_features.head())
 """
 Erstellen von Grid mit Ding0
 
+"""
+
+''''
+Aufrufen der Funktion, um aus vorgefertigten Grids, den gesuchten Bereich zu Filtern
+'''
+
+# Namen des Ordners mit den Grids
+grids_dir = "grids" 
+# Grid laden
+grid = gc.create_grid(bbox, grids_dir)
+
+# Grid speichern
+output_file = "dist_grid.nc"
+grid.export_to_netcdf(output_file)
+
+
+#%% Netz laden und plotten
+net = pypsa.Network("dist_grid.nc")
+net.plot(
+    bus_sizes=1 / 2e9,
+)
+plt.show()
+
+
+"""
+
 Anschließendes Kombinieren der Area_features_df mit dem Grid
 Ding0 gibt Knoten als .csv Datei als "Buses" raus. Diese Datei kann eingelesen werden und mit GeoDataFrame kombiniert werden.
 Beide Tabellen haben Koordinaten für jeweilige Zeilen.
@@ -94,9 +127,8 @@ Tabelle soll anschließend Pypsa kompatibel sein
 # gpd_area_features['y'] = gpd_area_features.geometry.y
 
 # """
-# .csv Datei von ding0 einlesen und benennnen
+# .nc Datei von ding0  ist eingelesen, einfach net.buses verwenden
 # """
-# buses = pd.read_csv('pfad/zur/deiner_datei.csv')
 
 # """
 # Beide DataFrames benötigen gleiches Format der Koordinaten
@@ -104,7 +136,7 @@ Tabelle soll anschließend Pypsa kompatibel sein
 # """
 
 
-# buses = pd.merge(buses, gpd_area_features.drop(columns='geometry'), on=['x', 'y'], how='left')
+# net.buses = pd.merge(net.buses, gpd_area_features.drop(columns='geometry'), on=['x', 'y'], how='left')
 
 
 
