@@ -5,27 +5,20 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
+import pypsa
 # import openpyxl # für pycity erforderlich
 import functions as func
 import grid_creation as gc
-import pypsa
+import data_combination as dc
 
 
 
 #%% GPS Data eingeben
-
-
 """"
 Definieren des zu untersuchenden Bereichs
 Eingabe von Rechteck mit Koordinaten
 Koordinaten in WGS84 System
 """
-
-
-# top =  48.001143  # Upper latitude
-# bottom = 47.997224  # Lower latitude
-# left =  7.837898   # Right longitude
-# right =  7.838992  # Left longitude
 
 top =  49.463 # # Upper latitude
 bottom = 49.460  # Lower latitude
@@ -33,31 +26,22 @@ left =  11.397    # Right longitude
 right =  11.402   # Left longitude
 bbox = [left, bottom, right, top]
 
-Area = ox.graph_from_bbox(top, bottom, right, left, network_type="all")
-
 
 
 #%% osm Data abrufen
-
-
 """"
 Abrufen der OSM Daten für den definierten Bereich
 Die Funktion get_osm_data() ist in functions_Linux.py definiert
 Tags sind in der Funktion definiert
 """
+Area, Area_features = func.get_osm_data(bbox)
 
 
 
-Area_features = func.get_osm_data(top, bottom, right, left)
-
-
-
-#%% Plotten der Daten
-
+#%% Plotten der osm-Daten
 """
 Visualisierung der OSM Daten
 """
-
 fig, ax = plt.subplots(figsize=(8, 8))
 ox.plot_graph(Area, ax=ax, show=False, close=False)
 Area_features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.7)
@@ -65,42 +49,32 @@ plt.show()
 
 
 
-#%% Data Management
-
+#%% Data Management: osm Data
 """
 Speichern der Rohdaten
 Laden der Daten in ein GeoDataFrame, für weitere Datensammlung
 """
-
 Area_features.to_file("Area_features.geojson", driver="GeoJSON")
-
-
 gpd_area_features = gpd.read_file('Area_features.geojson')
-
-print(gpd_area_features.head())
+#print(gpd_area_features.head())
 
 
 
 # #%% Grid erstellen
-
 """
-Erstellen von Grid mit Ding0
-
-"""
-
-''''
+Erstellen von Grid mit Ding0-Grids
 Aufrufen der Funktion, um aus vorgefertigten Grids, den gesuchten Bereich zu Filtern
-'''
-
+Die Funktion create_grid() ist in grid_creation.py definiert
+"""
 # Namen des Ordners mit den Grids
 grids_dir = "grids" 
+
 # Grid laden
 grid = gc.create_grid(bbox, grids_dir)
 
 # Grid speichern
 output_file = "dist_grid.nc"
 grid.export_to_netcdf(output_file)
-
 
 #%% Netz laden und plotten
 net = pypsa.Network("dist_grid.nc")
@@ -110,33 +84,13 @@ net.plot(
 plt.show()
 
 
+# #%% Daten kombinieren
+"""
+Kombinieren der OSM Daten mit dem Grid
+Die Funktion data_combination() ist in data_combination.py definiert
 """
 
-Anschließendes Kombinieren der Area_features_df mit dem Grid
-Ding0 gibt Knoten als .csv Datei als "Buses" raus. Diese Datei kann eingelesen werden und mit GeoDataFrame kombiniert werden.
-Beide Tabellen haben Koordinaten für jeweilige Zeilen.
-Tabelle soll anschließend Pypsa kompatibel sein
-"""
-
-
-
-# """
-# Extrahieren der Koordinaten von Area_features_df
-# """
-# gpd_area_features['x'] = gpd_area_features.geometry.x
-# gpd_area_features['y'] = gpd_area_features.geometry.y
-
-# """
-# .nc Datei von ding0  ist eingelesen, einfach net.buses verwenden
-# """
-
-# """
-# Beide DataFrames benötigen gleiches Format der Koordinaten
-# Dann zusammenfügen beider DataFrames anhand der Koordinaten
-# """
-
-
-# net.buses = pd.merge(net.buses, gpd_area_features.drop(columns='geometry'), on=['x', 'y'], how='left')
+net.buses = dc.data_combination(net.buses, gpd_area_features)
 
 
 
