@@ -27,10 +27,10 @@ Koordinaten in WGS84 System
 # left =  7.837898   # Right longitude
 # right =  7.838992  # Left longitude
 
-top =  49.4616852 + 0.00045 # ca. 49.4621352  # Upper latitude
-bottom = 49.4616852 - 0.00045 # ca. 49.4612352  # Lower latitude
-left =  11.3987696 - 0.0007  # ca. 11.3980696   # Right longitude
-right =  11.3987696 + 0.0007  # ca. 11.3994696  # Left longitude#
+top =  49.463 # # Upper latitude
+bottom = 49.460  # Lower latitude
+left =  11.397    # Right longitude
+right =  11.402   # Left longitude
 bbox = [left, bottom, right, top]
 
 Area = ox.graph_from_bbox(top, bottom, right, left, network_type="all")
