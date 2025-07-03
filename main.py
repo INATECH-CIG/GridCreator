@@ -90,12 +90,15 @@ Kombinieren der OSM Daten mit dem Grid
 Die Funktion data_combination() ist in data_combination.py definiert
 """
 
+# csv Datei Speicherung zur Prüfung der Tabellen
+net.buses.to_csv("grid_alt")
+gpd_area_features.to_csv("gpd")
 print(net.buses.head())
 
 net.buses = dc.data_combination(net.buses, gpd_area_features)
 
 print(net.buses.head())
-
+net.buses.to_csv("grid_neu")
 
 # #%% BEISPIEL weitere Daten definieren
 
