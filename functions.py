@@ -78,6 +78,20 @@ def get_osm_data(bbox):
     return Area, Area_features
 
 
+def compute_bbox_from_buses(net):
+    """
+    Compute the bounding box from the bus coordinates in a PyPSA network.
+    """
+    x_min = net.buses['x'].min()
+    x_max = net.buses['x'].max()
+    y_min = net.buses['y'].min()
+    y_max = net.buses['y'].max()
+
+    # Optional als [left, bottom, right, top]
+    bbox = [x_min, y_min, x_max, y_max]
+    return bbox
+
+
 
 def Bundesland(daten, plz):
     """
