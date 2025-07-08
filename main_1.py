@@ -15,14 +15,16 @@ import numpy as np
 import data_combination as dc
 import cartopy.crs as ccrs
 
-#%% GPS Data eingeben
-top =  54.48594882134629 # # Upper latitude
-bottom = 54.47265521486088 # Lower latitude
-left =  11.044533685584453    # Right longitude
-right =  11.084893505520695  # Left longitude#
+# #%% GPS Data eingeben
+# top =  54.48594882134629 # # Upper latitude
+# bottom = 54.47265521486088 # Lower latitude
+# left =  11.044533685584453    # Right longitude
+# right =  11.084893505520695  # Left longitude#
 
-
-
+bottom = 52.00631057817878
+left = 12.813255430844821
+top = 52.017279135599416
+right = 12.82639566153861
 bbox = [left, bottom, right, top]
 
 
@@ -84,15 +86,15 @@ print(f"Teilnetz gespeichert als: {output_file}")
 #%% Netz laden
 net = pypsa.Network("dist_grid.nc")
 
-# # Netz plotten (ohne Generator-Farben)
-# net.plot(bus_sizes=1 / 2e9)
-# # Generator-Positionen extrahieren
-# tra_buses = net.transformers['bus1']
-# tra_coords = net.buses.loc[tra_buses][['x', 'y']]
-# # Generatoren rot darüberplotten
-# plt.scatter(tra_coords['x'], tra_coords['y'], color='red', label='Transformers', zorder=5)
-# plt.legend()
-# plt.show()
+# Netz plotten (ohne Generator-Farben)
+net.plot(bus_sizes=1 / 2e9)
+# Generator-Positionen extrahieren
+tra_buses = net.transformers['bus1']
+tra_coords = net.buses.loc[tra_buses][['x', 'y']]
+# Generatoren rot darüberplotten
+plt.scatter(tra_coords['x'], tra_coords['y'], color='red', label='Transformers', zorder=5)
+plt.legend()
+plt.show()
 
 
 #%% Daten kombinieren
@@ -125,7 +127,7 @@ ax.scatter(
     generator_coords['y'],
     color='red',
     s=10,         # Punktgröße
-    label='Generatoren',
+    label='Transformers',
     zorder=5      # überlagert andere Layer
 )
 ax.legend(loc="upper right")
