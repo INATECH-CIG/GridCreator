@@ -20,10 +20,11 @@ def ding0_grid(bbox, grids_dir, output_file_grid):
     return grid, bbox_neu
 
 
-def osm_data(net, bbox_neu):
-
+def osm_data(net, bbox_neu, buffer):
+    left, bottom, right, top = bbox_neu
+    bbox_osm = (left - buffer, bottom - buffer, right + buffer, top + buffer)
     #%% osm Data abrufen
-    Area, Area_features = func.get_osm_data(bbox_neu)
+    Area, Area_features = func.get_osm_data(bbox_osm)
     # Speichern der OSM Daten
     Area_features.to_file("Area_features.geojson", driver="GeoJSON")
 

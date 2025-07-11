@@ -50,7 +50,8 @@ plt.show()
 
 #%% Step 2: osm data
 
-grid_2, area, features = mf.osm_data(grid_1, bbox_1)
+buffer = 0.0002  # entspricht ungefähr 20 m
+grid_2, area, features = mf.osm_data(grid_1, bbox_1, buffer)
 
 # # buses als csv speichern
 # grid_2.buses.to_csv("buses.csv")
@@ -92,6 +93,9 @@ ax.scatter(
 )
 
 ax.legend(loc="upper right")
+xmin, ymin, xmax, ymax = bbox_1
+ax.set_xlim(xmin - buffer, xmax + buffer)
+ax.set_ylim(ymin - buffer, ymax + buffer)
 plt.show()
 # %%
 
