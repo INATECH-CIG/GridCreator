@@ -12,7 +12,7 @@ import ding0_grid_transformers as ding0
 import pypsa
 from scipy.spatial import cKDTree
 import numpy as np
-import data_combination as dc
+import data_combination_old as dc
 import cartopy.crs as ccrs
 
 # #%% GPS Data eingeben

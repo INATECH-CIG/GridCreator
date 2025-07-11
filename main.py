@@ -9,7 +9,7 @@ import pypsa
 # import openpyxl # für pycity erforderlich
 import functions as func
 import grid_creation as gc
-import data_combination as dc
+import data_combination_old as dc
 
 
 
