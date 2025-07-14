@@ -12,12 +12,12 @@ import cartopy.crs as ccrs
 import osmnx as ox
 
 def zuordnung (ding0):
-    ding0.buses["dist_meter"] = np.sqrt(
+    ding0.buses["dist_osm_ding0_meter"] = np.sqrt(
         (ding0.buses["x"] - ding0.buses["osm_lon"])**2 +
         (ding0.buses["y"] - ding0.buses["osm_lat"])**2
     ) * 111_000  # grobe Umrechnung in Meter (1° ≈ 111 km)
 
-    ding0.buses["dist_meter"].describe()
+    ding0.buses["dist_osm_ding0_meter"].describe()
     return ding0
 
 

@@ -130,8 +130,10 @@ def Bundesland(net_buses, data):
     tree = spatial.cKDTree(ref_points)
     _, idx = tree.query(bus_points)
 
-    # 4. Bundeslandnamen zuordnen
-    net_buses["Bundesland"] = data.iloc[idx]["lan_name"].values
+    # Daten hinzufügen
+    zuordnen = ["lan_name", "plz_name", "plz_code", "krs_code", "lan_code", "krs_name"]
+    for spalte in zuordnen:
+        net_buses[spalte] = data.iloc[idx][spalte].values
 
     return net_buses
 
