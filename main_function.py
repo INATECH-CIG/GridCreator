@@ -34,3 +34,23 @@ def osm_data(net, bbox_neu, buffer):
     net = dc.data_combination(net, Area_features_df)
 
     return net, Area, Area_features
+
+
+
+def daten_zuordnung(net, bundesland_data, zensus_data):
+
+    # Bundesland
+    net.buses = func.Bundesland(net.buses, bundesland_data)
+
+    # Zensus ID
+    net.buses["Zensus_ID"] = func.gitter_ID(net.buses, zensus_data)
+
+    """
+    Mittels der Gitter_ID sollten nun auch alle weiteren Daten zugeordnet werden können.
+    """
+
+    # Zensus: Einwohnerdaten
+    spalte = "Einwohner"
+    net.buses = func.zenus_daten(net.buses, zensus_data, spalte)
+
+    return net

@@ -2,8 +2,14 @@ import main_function as mf
 import matplotlib.pyplot as plt
 import osmnx as ox
 import cartopy.crs as ccrs
+import geopandas as gpd
+import pandas as pd
 
 import zuordnung_ding0_osm as zuordnung
+
+# Daten laden
+pd_Zensus_Bevoelkerung_100m = pd.read_csv("Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
+gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
 
 #%% Definieren von bbox
 
@@ -103,7 +109,7 @@ plt.show()
 
 #%% Step 3: Zuordnung
 grid_3 = zuordnung.zuordnung(grid_2)
-print(grid_3.buses["dist_meter"])
+print(grid_3.buses["dist_osm_ding0_meter"])
 
 #%% Plot der Zuordnung
 zuordnung.plot_zuordnung(grid_2)
@@ -111,3 +117,8 @@ zuordnung.plot_zuordnung(grid_2)
 
 #%% Plot der Zuordnung mit Karte
 zuordnung.plot_zuordnung_karte(grid_2, area, features)
+
+
+
+#%% Step 4: Zurordnung weiterer Daten
+grid_3 = mf.daten_zuordnung(grid_2, gpd_bundesland, pd_Zensus_Bevoelkerung_100m)

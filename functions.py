@@ -6,6 +6,9 @@ import pandas as pd
 import osmnx as ox
 #import pystatis # noch nicht installiert im env
 import math
+import scipy.spatial as spatial
+import numpy as np
+import json
 
 #%% Funktionen zum aufrufen
 
@@ -80,7 +83,13 @@ def get_osm_data(bbox):
 
 def compute_bbox_from_buses(net):
     """
-    Compute the bounding box from the bus coordinates in a PyPSA network.
+    Berechnet die Bounding Box (bbox) aus den Koordinaten der Busse im Netz.
+
+    Parameters:
+    net (object): Ein Netzobjekt, das eine Attribut 'buses' enthält, welches ein DataFrame mit den Spalten 'x' und 'y' hat.
+
+    Returns:
+    list: Eine Liste mit den Koordinaten der Bounding Box in der Form [left, bottom, right, top].
     """
     x_min = net.buses['x'].min()
     x_max = net.buses['x'].max()
@@ -93,19 +102,38 @@ def compute_bbox_from_buses(net):
 
 
 
-def Bundesland(daten, plz):
+def Bundesland(net_buses, data):
+
     """
-    Ermittelt das Bundesland für eine gegebene Postleitzahl (PLZ) aus den Zensusdaten.
-
-    Parameter:
-    daten (DataFrame): DataFrame der Zensusdaten mit PLZ und Bundesland
-    plz (str): Postleitzahl, für die das Bundesland ermittelt werden soll
-
+    Weist jedem Bus im Netz das Bundesland zu, in dem er sich befindet.
+    
+    Parameters:
+    net_buses (DataFrame): DataFrame mit den Bussen des Netzes, die die Spalten 'x' und 'y' enthalten.
+    data (DataFrame): DataFrame mit den Referenzpunkten, die die Spalten 'geo_point_2d' (als JSON-String) und 'lan_name' enthalten.
+    
     Returns:
-    str: Name des Bundeslandes, das der angegebenen PLZ zugeordnet ist
+    DataFrame: Ein DataFrame mit den Bussen des Netzes, erweitert um die Spalte 'Bundesland'.
     """
 
-    return daten.loc[daten["name"] == plz, "lan_name"].values[0]
+    # 1. Referenzpunkte (bundesland) vorbereiten
+    data["geo_point_2d"] = data["geo_point_2d"].apply(json.loads)
+    ref_lon = data["geo_point_2d"].apply(lambda d: d["lon"])
+    ref_lat = data["geo_point_2d"].apply(lambda d: d["lat"])
+    ref_points = np.vstack((ref_lon, ref_lat)).T
+
+    # 2. Zielpunkte (buses) vorbereiten
+    bus_lon = net_buses["x"]
+    bus_lat = net_buses["y"]
+    bus_points = np.vstack((bus_lon, bus_lat)).T
+
+    # 3. KD-Tree bauen & Zuordnung
+    tree = spatial.cKDTree(ref_points)
+    _, idx = tree.query(bus_points)
+
+    # 4. Bundeslandnamen zuordnen
+    net_buses["Bundesland"] = data.iloc[idx]["lan_name"].values
+
+    return net_buses
 
 
 
@@ -144,38 +172,55 @@ def Gauss_zu_WG(rechtswert, hochwert):
 
 
 
-def gitter_ID(data, xpunkt, ypunkt):
+def gitter_ID(net_buses, data):
+
     """
-    Zuordnung von Nodes zu Gitter ID basierend auf den Koordinaten (xpunkt, ypunkt).
+    Weist jedem Bus im Netz die Gitter-ID des nächstgelegenen Referenzpunkts zu.
 
     Parameters:
-    data (DataFrame): DataFrame der Zensusdaten.
-    xpunkt (float): X-Koordinate des Punktes.
-    ypunkt (float): Y-Koordinate des Punktes.
-
-    Returns:
-    tuple: (x_mp_100m, y_mp_100m, GITTER_ID_100m) Koordinaten der Mitte dder Zelle und Gitter ID.
-    """
-
-    distance = [math.dist((x,y), (xpunkt, ypunkt)) for x,y in zip(data['x_mp_100m'],data['y_mp_100m'])]
-    point_index = distance.index(min(distance))
+    net_buses (DataFrame): DataFrame mit den Bussen des Netzes, die die Spalten 'x' und 'y' enthalten.
+    data (DataFrame): DataFrame mit den Referenzpunkten, die die Spalten 'x_mp_100m', 'y_mp_100m' und 'GITTER_ID_100m' enthalten.
     
-    return data['x_mp_100m'][point_index], data['y_mp_100m'][point_index], data['GITTER_ID_100m'][point_index]
-
-
-"""
-Einwohner je Gitter ID
-"""
-def get_population_count(data, gitter_id):
-    """
-    Gibt die Einwohnerzahl für eine bestimmte Gitter-ID zurück.
-
-    Parameters:
-    data (DataFrame): DataFrame der Zensusdaten
-    gitter_id (int): Gitter-ID, für die die Einwohnerzahl abgefragt wird
-
     Returns:
-    int: Einwohnerzahl für die angegebene Gitter-ID
+    numpy.ndarray: Ein Array mit den Gitter-IDs, die den Bussen zugeordnet
     """
 
-    return data.loc[data['GITTER_ID_100m'] == gitter_id, 'Einwohner'].values[0]
+    x_array, y_array = WG_zu_Gauss(net_buses["x"], net_buses["y"])
+
+    # Referenzpunkte in der Zensus-Tabelle
+    reference_points = np.vstack((data['x_mp_100m'].values, data['y_mp_100m'].values)).T
+    tree = spatial.cKDTree(reference_points)
+
+    # Zielpunkte aus dem Netz
+    query_points = np.vstack((x_array, y_array)).T
+
+    # Nächste Nachbarn finden
+    distances, indices = tree.query(query_points)
+
+    # Gitter-IDs extrahieren
+    gitter_ids = data.iloc[indices]['GITTER_ID_100m'].values
+
+    return gitter_ids
+
+
+
+def zenus_daten(net_buses, data, spaltenname):
+
+    """
+    Weist jedem Bus im Netz die Zensus-Daten anhand der Gitter-ID zu.
+    
+    Parameters:
+    net_buses (DataFrame): DataFrame mit den Bussen des Netzes, die die Spalte 'Zensus_ID' enthalten.
+    data (DataFrame): DataFrame mit den Zensus-Daten, die die Spalten 'GITTER_ID_100m' und die gewünschte Spalte enthalten.
+    spaltenname (str): Der Name der Spalte in den Zensus-Daten, die zugeordnet werden soll.
+    
+    Returns:
+    DataFrame: Ein DataFrame mit den Bussen des Netzes, erweitert um die Zensus-Daten.
+    """
+
+    net_buses = net_buses.merge(data[["GITTER_ID_100m", spaltenname]], left_on="Zensus_ID", right_on="GITTER_ID_100m", how="left")
+    # Umbenennen der neuen Spalte und löschen von GITTER_ID_100m
+    net_buses = net_buses.rename(columns={spaltenname: f"Zensus_{spaltenname}"})
+    net_buses = net_buses.drop(columns=["GITTER_ID_100m"])
+
+    return net_buses
