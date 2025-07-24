@@ -4,35 +4,29 @@ import osmnx as ox
 import cartopy.crs as ccrs
 import geopandas as gpd
 import pandas as pd
+import data as data
 
-import zuordnung_ding0_osm as zuordnung
+#%% STEP 1
 
-# Daten laden
-pd_Zensus_Bevoelkerung_100m = pd.read_csv("Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
-gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
+# Definieren von bbox
 
-#%% Definieren von bbox
+# top =  54.48594882134629 # # Upper latitude
+# bottom = 54.47265521486088 # Lower latitude
+# left =  11.044533685584453    # Right longitude
+# right =  11.084893505520695  # Left longitude
 
-top =  54.48594882134629 # # Upper latitude
-bottom = 54.47265521486088 # Lower latitude
-left =  11.044533685584453    # Right longitude
-right =  11.084893505520695  # Left longitude
-
-# top =  49.374518600877046 # # Upper latitude
-# bottom = 49.36971937206515 # Lower latitude
-# left =  12.697361279468392   # Right longitude
-# right =  12.708888681047798  # Left longitude
-
-
-
-
+top =  49.374518600877046 # # Upper latitude
+bottom = 49.36971937206515 # Lower latitude
+left =  12.697361279468392   # Right longitude
+right =  12.708888681047798  # Left longitude
 
 bbox = [left, bottom, right, top]
+
+# Speichern vom Grid
 output_file_grid = "dist_grid.nc"
 grids_dir = "grids" 
 
-#%% Step 1: Grid creation
-
+#Grid creation
 grid_1, bbox_1 = mf.ding0_grid(bbox, grids_dir, output_file_grid)
 
 
@@ -52,16 +46,35 @@ plt.show()
 
 
 
+#%% STEP 2
 
+# Daten laden
 
-#%% Step 2: osm data
-
+# OSM Daten
 buffer = 0.0002  # entspricht ungefähr 20 m
 grid_2, area, features = mf.osm_data(grid_1, bbox_1, buffer)
+
+# Bundesland-Daten
+gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
 
 # # buses als csv speichern
 # grid_2.buses.to_csv("buses.csv")
 
+# Zensus Daten
+"""
+Ordner zensus_daten enthält nur kleinen Tewil aller Zensus-Tabellen, um die Ladezeiten zu verkürzen.
+Alle Tabellen sind im Ordner zensus_daten_all enthalten.
+"""
+ordner = "zensus_daten"
+zensus = mf.daten_laden(ordner)
+
+"""
+Daten gespeichert, um sie ab jetzt nur noch direkt in einem DataFrame zu laden, spart Zeit!
+"""
+# zensus.to_pickle('Zensus_daten_als_DataFrame.pkl')
+# zensus = pd.read_pickle('Zensus_daten_als_DataFrame.pkl')
+
+grid_3 = mf.daten_zuordnung(grid_2, gpd_bundesland, zensus)
 
 
 """
@@ -106,19 +119,16 @@ plt.show()
 # %%
 
 
+#%% STEP 3
 
-#%% Step 3: Zuordnung
-grid_3 = zuordnung.zuordnung(grid_2)
-print(grid_3.buses["dist_osm_ding0_meter"])
+# Technik Zuordnen
 
-#%% Plot der Zuordnung
-zuordnung.plot_zuordnung(grid_2)
+# Zensusdaten für Bundesland
+Bev_data_Zensus = mf.bundesland_zensus(zensus, datei = "DE_VG5000.gpkg")
 
+# Technik definieren
+Technik = ['solar']
 
-#%% Plot der Zuordnung mit Karte
-zuordnung.plot_zuordnung_karte(grid_2, area, features)
-
-
-
-#%% Step 4: Zurordnung weiterer Daten
-grid_3 = mf.daten_zuordnung(grid_2, gpd_bundesland, pd_Zensus_Bevoelkerung_100m)
+# Technik zuordnen
+grid_4, factor_bbox = mf.technik_zuordnen(grid_3, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
+grid_5 = mf.technik_fill(grid_4, Technik, factor_bbox)
