@@ -10,15 +10,15 @@ import data as data
 
 # Definieren von bbox
 
-# top =  54.48594882134629 # # Upper latitude
-# bottom = 54.47265521486088 # Lower latitude
-# left =  11.044533685584453    # Right longitude
-# right =  11.084893505520695  # Left longitude
+top =  54.48594882134629 # # Upper latitude
+bottom = 54.47265521486088 # Lower latitude
+left =  11.044533685584453    # Right longitude
+right =  11.084893505520695  # Left longitude
 
-top =  49.374518600877046 # # Upper latitude
-bottom = 49.36971937206515 # Lower latitude
-left =  12.697361279468392   # Right longitude
-right =  12.708888681047798  # Left longitude
+# top =  49.374518600877046 # # Upper latitude
+# bottom = 49.36971937206515 # Lower latitude
+# left =  12.697361279468392   # Right longitude
+# right =  12.708888681047798  # Left longitude
 
 bbox = [left, bottom, right, top]
 
