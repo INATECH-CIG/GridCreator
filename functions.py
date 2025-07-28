@@ -159,21 +159,18 @@ def zensus_df_verbinden(daten_zensus):
     Verbindet mehrere DataFrames basierend auf der GITTER_ID_100m Spalte.
     
     Args:
-        daten_zensus (dict): Ein Dictionary, das DataFrames enthält, die auf GITTER_ID_100m basieren.
-    
+        daten_zensus (list): Eine Liste von DataFrames, die auf GITTER_ID_100m basieren.
+
     Returns:
         pd.DataFrame: Ein DataFrame, das die Daten aus allen DataFrames kombiniert.
     """
-
-    # Start mit den gemeinsamen Spalten aus einem beliebigen DF
-    dfs = list(daten_zensus.values())
 
     # Sicherstellen, dass alle DFs die gleichen drei Schlüsselspalten haben
     basis_spalten = ["GITTER_ID_100m", "x_mp_100m", "y_mp_100m"]
 
     # Alle DFs vorbereiten (nur einmalige ID-Spalten behalten)
     df_bereinigt = []
-    for df in tqdm(dfs, desc="DataFrames bereinigen"):
+    for df in tqdm(daten_zensus, desc="DataFrames bereinigen"):
         # Doppelte Spalten entfernen, außer den 3 gemeinsamen
         eigene_spalten = [col for col in df.columns if col not in basis_spalten]
         df_neu = df[basis_spalten + eigene_spalten]
@@ -282,7 +279,7 @@ def sum_mw(df):
 
     for col in df.columns:
         values = df[col]
-        if values.between(0, 1).all() or values.between(0, 100).all():
+        if col.endswith('_mw'):
             row[col] = values.mean()
         else:
             row[col] = values.sum()
@@ -425,7 +422,7 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
 
 
 
-def technik_sortieren(grid, Technik, p_total):
+def technik_sortieren(buses, Technik, p_total):
     """
     Füllt das Grid-Objekt mit der angegebenen Technik basierend auf den gegebenen Anteilen.
     Args:
@@ -437,18 +434,18 @@ def technik_sortieren(grid, Technik, p_total):
         pypsa.Network: Das aktualisierte Grid-Objekt mit den zugeordneten Techniken.
     """
 
-    mask_type1 = grid.buses["type_1"] == Technik
-    p_bbox = grid.buses.loc[mask_type1, "p_nom_1"].sum(min_count=1)
+    mask_type1 = buses["type_1"] == Technik
+    p_bbox = buses.loc[mask_type1, "p_nom_1"].sum(min_count=1)
     amount = mask_type1.sum()
 
-    if "type_2" in grid.buses.columns:
-        mask_type2 = grid.buses["type_2"] == Technik
-        p_bbox += grid.buses.loc[mask_type2, "p_nom_2"].dropna().sum()
+    if "type_2" in buses.columns:
+        mask_type2 = buses["type_2"] == Technik
+        p_bbox += buses.loc[mask_type2, "p_nom_2"].dropna().sum()
         amount += mask_type2.sum()
 
     # Falls keine Busse mit Technik gefunden wurden:
     if amount == 0:
-        return grid
+        return buses
     
 
 
@@ -456,13 +453,13 @@ def technik_sortieren(grid, Technik, p_total):
     p_rest = p_total - p_bbox
     if p_rest <= 0:
         # Alles verteilt, nichts zu tun
-        return grid
+        return buses
     
     # Mittelwert der vorhandenen Leistung pro Bus
     p_mean = p_bbox / amount if amount > 0 else 0
 
 
-    bus_sorted = grid.buses[(grid.buses['p_nom_1'].isna()) & (grid.buses['type_1'] != Technik)].copy()
+    bus_sorted = buses[(buses['p_nom_1'].isna()) & (buses['type_1'] != Technik)].copy()
     bus_sorted = bus_sorted.sort_values(by=['Factor_'+Technik], ascending = False)
     #to_fill = bus_sorted[bus_sorted['p_nom_1'].isna()].index.tolist()
     to_fill = bus_sorted.index.tolist()
@@ -473,9 +470,36 @@ def technik_sortieren(grid, Technik, p_total):
     for idx in to_fill:
         if verteilte_leistung + p_mean > p_rest:
             break
-        grid.buses.at[idx, 'p_nom_1'] = p_mean
+        buses.at[idx, 'p_nom_1'] = p_mean
         verteilte_leistung += p_mean
 
-    return grid
+    return buses
 
-# %%
+def storage(buses):
+    """
+    Fügt eine Spalte 'speicher' zu den Bussen hinzu, die den Speicherbedarf für Solarenergie berechnet.
+    
+    Args:
+        buses (pd.DataFrame): DataFrame mit den Busdaten, das die Spalten 'type_1' und 'p_nom_1' enthält.
+    
+    Returns:
+        pd.DataFrame: DataFrame mit der neuen Spalte 'speicher', die den Speicher bedarf für Solarenergie enthält.
+    """
+    
+    '''
+    Prob kann noch mit MArtstammdatenregister angepasst werden. Verhältnis für jede PLZ bestimmen
+    '''
+    prob = 0.8 # 80% der Solaranlagen haben einen Speicher
+    
+    # np.random.seed(seed) # Setze einen Seed für Reproduzierbarkeit
+    buses = buses.copy()
+    buses['speicher'] = 0.0
+    # Für alle Zeilen mit 'solar' in 'type_1' den Wert 5 setzen
+    solar_index = buses[buses['type_1'] == 'solar'].sample(frac=prob).index
+    buses.loc[solar_index, 'speicher'] = buses.loc[solar_index, 'p_nom_1'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
+
+    # Für alle Zeilen mit 'solar' in 'type_2' den Wert des Speichers ergänzen, falls ein Speicher vorhanden ist
+    if "type_2" in buses.columns:
+        buses.loc[buses['type_2'] == 'solar', 'speicher'] += buses.loc[buses['type_2'] == 'solar', 'p_nom_2'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
+    
+    return buses

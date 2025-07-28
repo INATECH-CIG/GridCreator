@@ -19,29 +19,34 @@ def daten_laden(ordner):
     Returns:
         pd.DataFrame: Ein DataFrame, das die kombinierten Zensusdaten enthält.
     """
+    # Manuell laden
+    pd_Zensus_Bevoelkerung_100m = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
+    pd_Zensus_Bevoelkerung_100m.rename(columns={"Einwohner": "Einwohner_sum"}, inplace=True)
 
-    data = {}
-    # Alle CSV-Dateien im Ordner durchgehen
+    pd_Zensus_Durchschn_Nettokaltmiete_100m = pd.read_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_100m-Gitter.csv", sep=";")
+    pd_Zensus_Durchschn_Nettokaltmiete_100m.rename(columns={"durchschnMieteQM": "durchschnMieteQM_mw"}, inplace=True)
 
-    dateien = [f for f in os.listdir(ordner) if f.endswith('.csv')]
+    pd_Zensus_Eigentuemerquote_100m = pd.read_csv(ordner + "/Zensus2022_Eigentuemerquote_100m-Gitter.csv", sep=";")
+    pd_Zensus_Eigentuemerquote_100m.rename(columns={"Eigentuemerquote": "Eigentuemerquote_mw"}, inplace=True)
 
-    for datei in tqdm(dateien, desc="Lade Zensusdaten"):
-        # Pfad bauen
-        pfad = os.path.join(ordner, datei)
-        # Name laden
-        basisname = os.path.splitext(datei)[0]
-        # DF-name bauen
-        varname = "pd_" + basisname.replace("-", "_").replace(" ", "_")
-        # Tabelle laden
-        df = pd.read_csv(pfad, sep=';', encoding='latin1')
-        # Ersetzen von "–" durch 0.0
+    pd_Zensus_Heizungsart_100m = pd.read_csv(ordner + "/Zensus2022_Heizungsart_100m-Gitter.csv", sep=";", encoding="cp1252")
+    pd_Zensus_Heizungsart_100m.rename(columns={"Insgesamt_Heizungsart": "Insgesamt_Heizungsart_sum",
+                                               "Fernheizung": "Fernheizung_sum",
+                                               "Etagenheizung": "Etagenheizung_sum",
+                                               "Blockheizung": "Blockheizung_sum",
+                                               "Zentralheizung": "Zentralheizung_sum",
+                                               "Einzel_Mehrraumoefen": "Einzel_Mehrraumoefen_sum",
+                                               "keine_Heizung": "keine_Heizung_sum"}, inplace=True)
+
+    # Zensus Daten in Liste umwandeln
+    data = [pd_Zensus_Bevoelkerung_100m, pd_Zensus_Heizungsart_100m, pd_Zensus_Durchschn_Nettokaltmiete_100m, pd_Zensus_Eigentuemerquote_100m]
+
+    for df in data:
         df.replace("–", 0.0, inplace=True)
-        # Spalte "werterlaeuternde_Zeichen" entfernen, falls vorhanden
         if "werterlaeuternde_Zeichen" in df.columns:
             df.drop(columns=["werterlaeuternde_Zeichen"], inplace=True)
 
-        data[varname] = df
-
+    # Kombinieren der DataFrames
     daten = func.zensus_df_verbinden(data)
 
     return daten
@@ -194,5 +199,8 @@ def technik_fill(grid, Technik, p_total):
     """
 
     for tech, p in zip(Technik, p_total):
-        grid = func.technik_sortieren(grid, tech, p)
+        grid.buses = func.technik_sortieren(grid.buses, tech, p)
+
+    grid.buses = func.storage(grid.buses)
+    
     return grid

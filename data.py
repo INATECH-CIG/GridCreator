@@ -56,58 +56,58 @@ Hier darf mehr stehen
 faktoren_technik = {
     'solar':{
         'Heizung': {
-            'Zensus_Fernheizung': 0.2,
-            'Zensus_Etagenheizung': 0.7,
-            'Zensus_Blockheizung': 0.1,
-            'Zensus_Zentralheizung': 0.5,
-            'Zensus_Einzel_Mehrraumoefen': 0.3,
-            'Zensus_keine_Heizung': 0.1
+            'Zensus_Fernheizung_sum': 0.2,
+            'Zensus_Etagenheizung_sum': 0.7,
+            'Zensus_Blockheizung_sum': 0.1,
+            'Zensus_Zentralheizung_sum': 0.5,
+            'Zensus_Einzel_Mehrraumoefen_sum': 0.3,
+            'Zensus_keine_Heizung_sum': 0.1
         },
         'Miete': {
-            'Zensus_durchschnMieteQM': 0.6,
-            'Zensus_Eigentuemerquote': 0.4
+            'Zensus_durchschnMieteQM_mw': 0.6,
+            'Zensus_Eigentuemerquote_mw': 0.4
         }
     },
     'HP_ambient':{
         'Heizung': {
-            'Zensus_Fernheizung': 0.1,
-            'Zensus_Etagenheizung': 0.5,
-            'Zensus_Blockheizung': 0.2,
-            'Zensus_Zentralheizung': 0.4,
-            'Zensus_Einzel_Mehrraumoefen': 0.2,
-            'Zensus_keine_Heizung': 0.4
+            'Zensus_Fernheizung_sum': 0.1,
+            'Zensus_Etagenheizung_sum': 0.5,
+            'Zensus_Blockheizung_sum': 0.2,
+            'Zensus_Zentralheizung_sum': 0.4,
+            'Zensus_Einzel_Mehrraumoefen_sum': 0.2,
+            'Zensus_keine_Heizung_sum': 0.4
         },
         'Miete': {
-            'Zensus_durchschnMieteQM': 0.3,
-            'Zensus_Eigentuemerquote': 0.2
+            'Zensus_durchschnMieteQM_mw': 0.3,
+            'Zensus_Eigentuemerquote_mw': 0.2
         }
     }, 
     'HP_geothermal':{
         'Heizung': {
-            'Zensus_Fernheizung': 0.3,
-            'Zensus_Etagenheizung': 0.2,
-            'Zensus_Blockheizung': 0.4,
-            'Zensus_Zentralheizung': 0.6,
-            'Zensus_Einzel_Mehrraumoefen': 0.1,
-            'Zensus_keine_Heizung': 0.3
+            'Zensus_Fernheizung_sum': 0.3,
+            'Zensus_Etagenheizung_sum': 0.2,
+            'Zensus_Blockheizung_sum': 0.4,
+            'Zensus_Zentralheizung_sum': 0.6,
+            'Zensus_Einzel_Mehrraumoefen_sum': 0.1,
+            'Zensus_keine_Heizung_sum': 0.3
         },
         'Miete': {
-            'Zensus_durchschnMieteQM': 0.5,
-            'Zensus_Eigentuemerquote': 0.3
+            'Zensus_durchschnMieteQM_mw': 0.5,
+            'Zensus_Eigentuemerquote_mw': 0.3
         }
     },
     'E_car':{
         'Heizung': {
-            'Zensus_Fernheizung': 0.4,
-            'Zensus_Etagenheizung': 0.3,
-            'Zensus_Blockheizung': 0.2,
-            'Zensus_Zentralheizung': 0.5,
-            'Zensus_Einzel_Mehrraumoefen': 0.4,
-            'Zensus_keine_Heizung': 0.2
+            'Zensus_Fernheizung_sum': 0.4,
+            'Zensus_Etagenheizung_sum': 0.3,
+            'Zensus_Blockheizung_sum': 0.2,
+            'Zensus_Zentralheizung_sum': 0.5,
+            'Zensus_Einzel_Mehrraumoefen_sum': 0.4,
+            'Zensus_keine_Heizung_sum': 0.2
         },
         'Miete': {
-            'Zensus_durchschnMieteQM': 0.7,
-            'Zensus_Eigentuemerquote': 0.5
+            'Zensus_durchschnMieteQM_mw': 0.7,
+            'Zensus_Eigentuemerquote_mw': 0.5
         }
     }
 }
@@ -119,8 +119,8 @@ Allgemeine Definition, unabhängig von allem
 Alles was hier steht, muss überall vorkommen
 """
 kategorien_eigenschaften = pd.DataFrame({
-    'Heizung': ['Zensus_Fernheizung', 'Zensus_Etagenheizung', 'Zensus_Blockheizung', 'Zensus_Zentralheizung', 'Zensus_Einzel_Mehrraumoefen', 'Zensus_keine_Heizung'],
-    'Miete': ['Zensus_durchschnMieteQM', 'Zensus_Eigentuemerquote', None, None, None, None]
+    'Heizung': ['Zensus_Fernheizung_sum', 'Zensus_Etagenheizung_sum', 'Zensus_Blockheizung_sum', 'Zensus_Zentralheizung_sum', 'Zensus_Einzel_Mehrraumoefen_sum', 'Zensus_keine_Heizung_sum'],
+    'Miete': ['Zensus_durchschnMieteQM_mw', 'Zensus_Eigentuemerquote_mw', None, None, None, None]
 })
 
 
