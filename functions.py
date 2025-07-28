@@ -495,11 +495,11 @@ def storage(buses):
     buses = buses.copy()
     buses['speicher'] = 0.0
     # Für alle Zeilen mit 'solar' in 'type_1' den Wert 5 setzen
-    solar_index = buses[buses['type_1'] == 'solar'].sample(frac=prob).index
+    solar_index = buses[buses['p_nom_1'].notna()].sample(frac=prob).index
     buses.loc[solar_index, 'speicher'] = buses.loc[solar_index, 'p_nom_1'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
 
     # Für alle Zeilen mit 'solar' in 'type_2' den Wert des Speichers ergänzen, falls ein Speicher vorhanden ist
-    if "type_2" in buses.columns:
-        buses.loc[buses['type_2'] == 'solar', 'speicher'] += buses.loc[buses['type_2'] == 'solar', 'p_nom_2'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
-    
+    if "p_nom_2" in buses.columns:
+        buses.loc[buses['p_nom_2'].notna(), 'speicher'] += buses.loc[buses['p_nom_2'].notna(), 'p_nom_2'] * 1
+     
     return buses
