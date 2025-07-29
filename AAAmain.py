@@ -158,7 +158,7 @@ grid_6 = mf.loads_zuordnen(grid_5_copy)
 
 # Grid für pysa.optimze() vorbereiten
 grid_6_copy = grid_6.copy()
-grid_7 = mf.ding0_grid_technisch(grid_6_copy)
+grid_7 = mf.pypsa_vorbereiten(grid_6_copy)
 
 
 # .optimize()

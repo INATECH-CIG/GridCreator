@@ -308,7 +308,7 @@ def loads_zuordnen(grid):
         
     return grid
 
-def ding0_grid_technisch(grid):
+def pypsa_vorbereiten(grid):
 
     # Kosten für Solaranlagen müssen wahrscheinlich allgemein gesetzt werden
 
