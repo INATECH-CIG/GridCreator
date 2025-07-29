@@ -296,7 +296,7 @@ def loads_zuordnen(grid):
                 carrier="AC",
                 p_set = pd.Series([18,17,16,15,0,0,0,0,19,20,22,24,0,23,0,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
 
-
+    grid.loads['carrier'] = 'AC'
 
     # Wetter sollte schon hinzugefügt sein, hier nur Beispielwerte
     solar_profile = pd.Series([0.9, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -334,7 +334,6 @@ def pypsa_vorbereiten(grid):
     grid.add("Carrier", "battery", co2_emissions=0, color="gray")
     grid.add("Carrier", "AC", co2_emissions=0, color="black")  # Für Busse, Lasten, Leitungen
 
-    grid.loads['carrier'] = 'AC'
 
     # Allen Tranformatoren einen Generator hinzufügen, um Strom von außerhalb zuzulassen
 
