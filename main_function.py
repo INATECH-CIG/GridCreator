@@ -204,3 +204,155 @@ def technik_fill(grid, Technik, p_total):
     grid.buses = func.storage(grid.buses)
     
     return grid
+
+
+
+def loads_zuordnen(grid):
+    
+    # Powerflow zu bestehendem Netz
+    grid.pf()
+
+    # Zeit sollte auch schon integriert sein, wenn Lasten schon im Netz sind
+    grid.set_snapshots(range(24))  # z.B. 24 Stunden
+
+    # Lasten sollten schon im Netz integriert sein, hier nur Beispielwerte
+    grid.add("Load", "Load_1",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969207",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,6,0,4,5,6,7,9,10,12,0,15,13,11,10,0,8,7,6,5,5,6,7], index=grid.snapshots))
+
+    grid.add("Load", "Load_2",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_28",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([18,17,16,15,14,15,16,17,19,20,22,24,25,23,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
+
+    grid.add("Load", "Load_3",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969655",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,0,5,4,0,6,0,9,0,12,0,15,0,11,0,9,8,7,6,5,5,6,7], index=grid.snapshots))
+
+    grid.add("Load", "Load_4",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969221",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([18,0,0,0,14,15,16,17,19,20,22,0,25,0,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
+
+    grid.add("Load", "Load_5",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28968489",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,6,5,4,5,6,7,0,0,0,0,15,0,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+
+    grid.add("Load", "Load_6",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969176",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([18,17,16,15,0,0,0,0,0,20,22,24,25,23,0,0,0,0,17,16,15,15,16,17], index=grid.snapshots))
+
+    grid.add("Load", "Load_7",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969592",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,0,50,0,0,0,7,9,10,12,14,15,13,11,10,0,0,7,6,5,5,6,7], index=grid.snapshots))
+
+    grid.add("Load", "Load_8",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969224",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([18,17,0,0,0,0,0,0,0,0,0,0,0,0,201,20,0,0,0,0,0,15,16,17], index=grid.snapshots))
+
+    grid.add("Load", "Load_9",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969634",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,0,0,0,0,0,0,0,0,0], index=grid.snapshots))
+
+    grid.add("Load", "Load_10",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_18",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([0,0,0,0,0,0,0,0,0,0,202,0,0,0,0,0,0,0,0,0,0,150,0,17], index=grid.snapshots))
+
+    grid.add("Load", "Load_11",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_14",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+
+    grid.add("Load", "Load_12",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969253",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([18,17,16,15,14,15,16,17,19,20,22,24,25,23,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
+
+    grid.add("Load", "Load_13",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969616",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+
+    grid.add("Load", "Load_14",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_71",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([18,17,16,15,14,15,16,17,19,20,22,24,25,23,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
+
+    grid.add("Load", "Load_15",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969777",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC", 
+                p__set = pd.Series([8,7,6,5,4,5,6,7,9,0,12,14,105,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+
+    grid.add("Load", "Load_16",
+                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28968480",       # in MW (bei Zeitreihe: Liste oder Serie)
+                carrier="AC",
+                p_set = pd.Series([18,17,16,15,0,0,0,0,19,20,22,24,0,23,0,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
+
+
+
+    # Wetter sollte schon hinzugefügt sein, hier nur Beispielwerte
+    solar_profile = pd.Series([0.9, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0.8, 0, 0, 0, 0,
+                            0, 0, 0, 0], index=grid.snapshots)
+    for gen in grid.generators.index[grid.generators['type'] == 'solar']:
+        grid.generators_t[gen, 'p_max_pu'] = solar_profile
+
+        
+    return grid
+
+def ding0_grid_technisch(grid):
+
+    # Kosten für Solaranlagen müssen wahrscheinlich allgemein gesetzt werden
+
+    grid.generators.loc[grid.generators['type'] == 'solar', 'marginal_cost'] = 100
+    grid.generators.loc[grid.generators['type'] == 'solar', 'capital_cost'] = 1000
+    grid.generators.loc[grid.generators['type'] == 'solar', 'efficiency'] = 0.9
+    grid.generators.loc[grid.generators['type'] == 'solar', 'p_nom_extendable'] = False
+    grid.generators.loc[grid.generators['type'] == 'solar', 'p_max_pu'] = 1
+
+    # Kosten für Kabel müssen wahrscheinlich allgemein gesetzt werden
+    grid.lines.loc[grid.lines['carrier'] == 'AC', 'capital_cost'] = 50
+    grid.lines.loc[grid.lines['carrier'] == 'AC', 's_nom_max'] = 1000
+    grid.lines.loc[grid.lines['carrier'] == 'AC', 's_nom'] = 100
+    grid.lines.loc[grid.lines['carrier'] == 'AC', 'r'] = 0.001
+    grid.lines.loc[grid.lines['carrier'] == 'AC', 'x'] = 0.01
+    grid.lines.loc[grid.lines['carrier'] == 'AC', 's_nom_extendable'] = True
+
+
+    # Carrier müssen am Ende allgemein gesetzt werden
+    grid.add("Carrier", "gas", co2_emissions=0, color="orange")
+    grid.add("Carrier", "solar", co2_emissions=0, color="yellow")
+    grid.add("Carrier", "wind", co2_emissions=0, color="cyan")
+    grid.add("Carrier", "battery", co2_emissions=0, color="gray")
+    grid.add("Carrier", "AC", co2_emissions=0, color="black")  # Für Busse, Lasten, Leitungen
+
+    grid.loads['carrier'] = 'AC'
+
+    # Allen Tranformatoren einen Generator hinzufügen, um Strom von außerhalb zuzulassen
+
+    for i, trafo in grid.transformers.iterrows():
+        # lv bus extrahieren
+        bus_lv = trafo['bus1']  
+        # name setzen
+        gen_name = f"Generator_am_{i}"
+
+        grid.add("Generator",
+                name=gen_name,
+                bus=bus_lv,
+                carrier="gas",
+                p_nom=100,
+                p_nom_extendable=True,
+                capital_cost=500,
+                marginal_cost=50,
+                efficiency=0.4)
+        
+    return grid
+

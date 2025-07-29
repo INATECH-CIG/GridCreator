@@ -1,5 +1,7 @@
 import main_function as mf
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as colors
 import osmnx as ox
 import cartopy.crs as ccrs
 import geopandas as gpd
@@ -10,15 +12,15 @@ import data as data
 
 # Definieren von bbox
 
-top =  54.48594882134629 # # Upper latitude
-bottom = 54.47265521486088 # Lower latitude
-left =  11.044533685584453    # Right longitude
-right =  11.084893505520695  # Left longitude
+# top =  54.48594882134629 # # Upper latitude
+# bottom = 54.47265521486088 # Lower latitude
+# left =  11.044533685584453    # Right longitude
+# right =  11.084893505520695  # Left longitude
 
-# top =  49.374518600877046 # # Upper latitude
-# bottom = 49.36971937206515 # Lower latitude
-# left =  12.697361279468392   # Right longitude
-# right =  12.708888681047798  # Left longitude
+top =  49.374518600877046 # # Upper latitude
+bottom = 49.36971937206515 # Lower latitude
+left =  12.697361279468392   # Right longitude
+right =  12.708888681047798  # Left longitude
 
 bbox = [left, bottom, right, top]
 
@@ -136,3 +138,76 @@ grid_3_copy = grid_3.copy()
 grid_4, factor_bbox = mf.technik_zuordnen(grid_3_copy, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
 grid_4_copy = grid_4.copy()
 grid_5 = mf.technik_fill(grid_4_copy, Technik, factor_bbox)
+
+
+
+#%% STEP 4
+
+# Zeitreihen hinzufügen
+
+'''
+Zeitreihen sind spezifischen buses zugeordnet!
+Funktioniert also auch nur für ausgewählte Koordinaten!
+'''
+
+grid_5_copy = grid_5.copy()
+grid_6 = mf.loads_zuordnen(grid_5_copy)
+
+
+#%% STEP 5
+
+# Grid für pysa.optimze() vorbereiten
+grid_6_copy = grid_6.copy()
+grid_7 = mf.ding0_grid_technisch(grid_6_copy)
+
+
+# .optimize()
+grid_7.optimize()
+
+
+# Ergebnisse plotten
+
+# Color Map für Powerflow
+cmap = plt.colormaps.get_cmap('coolwarm')  # Neue API für Colormap
+
+# Zeitschritte einzelnd plotten
+for i, snapshot in enumerate(grid_7.snapshots):
+    pf = grid_7.lines_t.p0.loc[snapshot]
+
+    # Normalisieren
+    norm = colors.Normalize(vmin=pf.min(), vmax=pf.max())
+    line_colors = [cmap(norm(val)) for val in pf]
+
+    # Plot erstellen
+    fig, ax = plt.subplots(figsize=(6, 6))
+    plot_dict = grid_7.plot.map(line_colors=line_colors, bus_sizes=1e-9, line_widths=2)
+    plt.title(f"Power Flow - Stunde {i}")
+
+    # Farbskala hinzufügen
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])  # notwendig für colorbar
+    fig.colorbar(sm, ax=ax, label="Power Flow [MW]")
+
+    plt.show()
+
+
+
+# Ale Transformator-Generatoren plotten
+
+fig, ax = plt.subplots()
+ax.set_xlabel("Stunde")
+ax.set_ylabel("Leistung [MW]")
+
+# Nur Generatoren mit carrier "gas"
+gas_generators = grid_7.generators[grid_7.generators.carrier == "gas"]
+
+# Für jeden dieser Generatoren die Zeitreihe plotten
+for name in gas_generators.index:
+    ax.plot(grid_7.generators_t.p.index, grid_7.generators_t.p[name], label=name)
+
+ax.axhline(0, color="gray", linewidth=0.5)
+ax.legend(fontsize="small", loc="upper right", bbox_to_anchor=(1.3, 1.0))
+plt.title("Generatorleistungen (nur an Transformatoren)")
+plt.tight_layout()
+plt.show()
+
