@@ -247,8 +247,8 @@ def load_shapes(datei):
     # Filtern der Geometrien nach Bundesländern
     laender = shapes[shapes["GEN"].isin(bundeslaender)]
     # Filtern der Geometrien
-    laender_aggregiert = laender.dissolve(by="GEN")
-    laender_umrisse = laender_aggregiert[["geometry"]]
+    laender_trennen = laender.dissolve(by="GEN")
+    laender_umrisse = laender_trennen[["geometry"]]
     laender_3035 = laender_umrisse.to_crs(epsg=3035)
 
     return laender_3035
@@ -434,14 +434,14 @@ def technik_sortieren(buses, Technik, p_total):
         pypsa.Network: Das aktualisierte Grid-Objekt mit den zugeordneten Techniken.
     """
 
-    mask_type1 = buses["type_1"] == Technik
-    p_bbox = buses.loc[mask_type1, "p_nom_1"].sum(min_count=1)
-    amount = mask_type1.sum()
+    type1 = buses["type_1"] == Technik
+    p_bbox = buses.loc[type1, "p_nom_1"].sum(min_count=1)
+    amount = type1.sum()
 
     if "type_2" in buses.columns:
-        mask_type2 = buses["type_2"] == Technik
-        p_bbox += buses.loc[mask_type2, "p_nom_2"].dropna().sum()
-        amount += mask_type2.sum()
+        type2 = buses["type_2"] == Technik
+        p_bbox += buses.loc[type2, "p_nom_2"].dropna().sum()
+        amount += type2.sum()
 
     # Falls keine Busse mit Technik gefunden wurden:
     if amount == 0:

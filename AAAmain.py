@@ -52,7 +52,8 @@ plt.show()
 
 # OSM Daten
 buffer = 0.0002  # entspricht ungefähr 20 m
-grid_2, area, features = mf.osm_data(grid_1, bbox_1, buffer)
+grid_1_copy = grid_1.copy()
+grid_2, area, features = mf.osm_data(grid_1_copy, bbox_1, buffer)
 
 # Bundesland-Daten
 gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
@@ -74,7 +75,8 @@ Daten gespeichert, um sie ab jetzt nur noch direkt in einem DataFrame zu laden, 
 # zensus.to_pickle('Zensus_daten_als_DataFrame.pkl')
 # zensus = pd.read_pickle('Zensus_daten_als_DataFrame.pkl')
 
-grid_3 = mf.daten_zuordnung(grid_2, gpd_bundesland, zensus)
+grid_2_copy = grid_2.copy()
+grid_3 = mf.daten_zuordnung(grid_2_copy, gpd_bundesland, zensus)
 
 
 """
@@ -130,5 +132,7 @@ Bev_data_Zensus = mf.bundesland_zensus(zensus, datei = "DE_VG5000.gpkg")
 Technik = ['solar']
 
 # Technik zuordnen
-grid_4, factor_bbox = mf.technik_zuordnen(grid_3, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
-grid_5 = mf.technik_fill(grid_4, Technik, factor_bbox)
+grid_3_copy = grid_3.copy()
+grid_4, factor_bbox = mf.technik_zuordnen(grid_3_copy, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
+grid_4_copy = grid_4.copy()
+grid_5 = mf.technik_fill(grid_4_copy, Technik, factor_bbox)
