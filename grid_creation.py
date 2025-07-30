@@ -62,5 +62,12 @@ def create_grid(bbox, grids_dir):
     print(f"Lösche {len(buses_to_remove)} Busse außerhalb des Quadrats.")
     net.remove("Bus", list(buses_to_remove))
 
+    remaining_buses = set(net.buses.index)
+    # analog für Generators:
+    net.generators = net.generators[
+    net.generators['bus'].isin(remaining_buses)
+    ]
+
+
     # Rückgabe des Netzwerks
     return net
