@@ -74,7 +74,8 @@ def ding0_grid(bbox, grids_dir, output_file_grid):
     # Grid creation für erweiterte bbox
     grid = ding0.load_grid(bbox_neu, grids_dir)
 
-    grid.export_to_netcdf(output_file_grid)
+    # # Grid speichern
+    # grid.export_to_netcdf(output_file_grid)
 
     return grid, bbox_neu
 
