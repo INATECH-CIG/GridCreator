@@ -81,11 +81,7 @@ grid_2_copy = grid_2.copy()
 grid_3 = mf.daten_zuordnung(grid_2_copy, gpd_bundesland, zensus)
 
 
-"""
-Check durch PLOT
-"""
-
-#%% Plot-Vorbereitung
+# Plot-Vorbereitung
 fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
 
 # Netzplot
@@ -120,8 +116,6 @@ xmin, ymin, xmax, ymax = bbox_1
 ax.set_xlim(xmin - buffer, xmax + buffer)
 ax.set_ylim(ymin - buffer, ymax + buffer)
 plt.show()
-# %%
-
 
 #%% STEP 3
 
@@ -165,7 +159,7 @@ grid_7 = mf.pypsa_vorbereiten(grid_6_copy)
 grid_7.optimize()
 
 
-# Ergebnisse plotten
+#%% Ergebnisse plotten
 
 # Color Map für Powerflow
 cmap = plt.colormaps.get_cmap('coolwarm')  # Neue API für Colormap
@@ -211,3 +205,5 @@ plt.title("Generatorleistungen (nur an Transformatoren)")
 plt.tight_layout()
 plt.show()
 
+
+# %%
