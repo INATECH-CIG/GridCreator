@@ -83,6 +83,15 @@ net.plot(
 )
 plt.show()
 
+#%%
+import cartopy.crs as ccrs
+fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+net.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
+ox.plot_graph(Area, ax=ax, show=False, close=False)
+Area_features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.7)
+plt.show()
+#%%
+
 
 # #%% Daten kombinieren
 """
