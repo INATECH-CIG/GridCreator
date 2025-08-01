@@ -6,8 +6,7 @@ from shapely.geometry import Point
 import networkx as nx
 
 
-def data_combination(ding0, osm):
-
+def data_combination(ding0, buses_df, osm):
 
     # Alle Zeilen von Generator nach "bus" gruppieren
     grouped = ding0.generators.groupby("bus")
@@ -29,7 +28,7 @@ def data_combination(ding0, osm):
 
     ding0.buses.index = ding0.buses.index.astype(str)
     # Mit df_A verbinden
-    ding0.buses = ding0.buses.join(generators_flat)
+    buses_df = ding0.buses.join(generators_flat)
 
 
     # Nur end-buses für matching verwenden
@@ -99,8 +98,8 @@ def data_combination(ding0, osm):
 
 
     # Ergebnis initialisieren
-    ding0.buses["matched_node_idx"] = None
-    ding0.buses["matched_dist"] = None
+    buses_df["matched_node_idx"] = None
+    buses_df["matched_dist"] = None
 
     # Index-Zuordnung (von gefiltertem Matching-Set auf Gesamtset)
     match_bus_ids = matching_buses.index.to_list()
@@ -112,14 +111,14 @@ def data_combination(ding0, osm):
         bus_id = match_bus_ids[bus_idx]
 
         # Werte eintragen
-        ding0.buses.at[bus_id, "matched_node_idx"] = node_idx
-        ding0.buses.at[bus_id, "matched_dist"] = dist
+        buses_df.at[bus_id, "matched_node_idx"] = node_idx
+        buses_df.at[bus_id, "matched_dist"] = dist
 
     # Neue Spalten aus OSM-Daten übertragen
     new_columns = {}
     for col in nodes_gdf.columns:
         values = []
-        for idx in ding0.buses["matched_node_idx"]:
+        for idx in buses_df["matched_node_idx"]:
             if pd.notna(idx) and int(idx) < len(nodes_gdf):
                 values.append(nodes_gdf.iloc[int(idx)][col])
             else:
@@ -133,8 +132,8 @@ def data_combination(ding0, osm):
 
     # Spalten hinzufügen
     new_data = pd.DataFrame(new_columns, index=ding0.buses.index)
-    ding0.buses = pd.concat([ding0.buses, new_data], axis=1)
-    ding0.buses = ding0.buses.copy()
+    buses_df = pd.concat([buses_df, new_data], axis=1)
+    # ding0.buses = ding0.buses.copy()
 
-    return ding0
+    return buses_df
 

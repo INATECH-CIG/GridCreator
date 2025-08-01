@@ -80,7 +80,7 @@ def ding0_grid(bbox, grids_dir, output_file_grid):
     return grid, bbox_neu
 
 
-def osm_data(net, bbox_neu, buffer):
+def osm_data(net, buses_df, bbox_neu, buffer):
     """
     Ruft OSM-Daten für die gegebene Bounding Box ab und gibt sie zurück.
 
@@ -95,20 +95,20 @@ def osm_data(net, bbox_neu, buffer):
 
     left, bottom, right, top = bbox_neu
     bbox_osm = (left - buffer, bottom - buffer, right + buffer, top + buffer)
-    #%% osm Data abrufen
+    # osm Data abrufen
     Area, Area_features = func.get_osm_data(bbox_osm)
     # Speichern der OSM Daten
     Area_features.to_file("Area_features.geojson", driver="GeoJSON")
 
     Area_features_df = Area_features.reset_index()
 
-    #%% Daten kombinieren
-    net = dc.data_combination(net, Area_features_df)
+    # Daten kombinieren
+    buses_df = dc.data_combination(net, buses_df, Area_features_df)
 
-    return net, Area, Area_features
+    return buses_df, Area, Area_features
 
 
-def daten_zuordnung(net, bundesland_data, zensus_data):
+def daten_zuordnung(buses, bundesland_data, zensus_data):
     """
     Weist den Bussen im Netzwerk Bundesland- und Zensusdaten zu.
     
@@ -122,12 +122,12 @@ def daten_zuordnung(net, bundesland_data, zensus_data):
     """
 
     # Bundesland
-    net.buses = func.bundesland(net.buses, bundesland_data)
+    buses = func.bundesland(buses, bundesland_data)
 
     # Zensus Daten
-    net.buses = func.daten_zuordnen(net.buses, zensus_data)
+    buses = func.daten_zuordnen(buses, zensus_data)
 
-    return net
+    return buses
 
 
 
@@ -152,7 +152,7 @@ def bundesland_zensus(zensus, datei):
 
 
 
-def technik_zuordnen(grid, factors, kategorien_eigenschaften, Bev_data_Zensus, Bev_data_Technik, technik_arr):
+def technik_zuordnen(buses, factors, kategorien_eigenschaften, Bev_data_Zensus, Bev_data_Technik, technik_arr):
     """
     Ordnet den Bussen im Grid verschiedene Techniken zu und berechnet die entsprechenden Faktoren.
     Args:
@@ -169,9 +169,9 @@ def technik_zuordnen(grid, factors, kategorien_eigenschaften, Bev_data_Zensus, B
 
     Bev_data = pd.merge(Bev_data_Zensus, Bev_data_Technik, on="GEN", how="left")
 
-    df_land = grid.buses['lan_name'].copy().to_frame()
+    df_land = buses['lan_name'].copy().to_frame()
 
-    df_zensus = grid.buses[[col for col in grid.buses.columns if col.startswith("Zensus")]].copy()
+    df_zensus = buses[[col for col in buses.columns if col.startswith("Zensus")]].copy()
     # Kommas durch Punkte ersetzen, damit pd.to_numeric klappt; In float umwandeln; Fehlende Werte auf 0 setzen
     df_zensus = (df_zensus.astype(str).replace(",", ".", regex=True).apply(pd.to_numeric, errors="coerce").fillna(0.0))
 
@@ -180,13 +180,13 @@ def technik_zuordnen(grid, factors, kategorien_eigenschaften, Bev_data_Zensus, B
     factor_bbox = np.array([0.0] * len(technik_arr))
     for i, technik in enumerate(technik_arr):
         factors_technik = factors[technik]
-        grid.buses['Factor_' + technik], factor_bbox[i] = func.calculate_factors(df_eigenschaften, factors_technik, kategorien_eigenschaften, Bev_data, technik)
+        buses['Factor_' + technik], factor_bbox[i] = func.calculate_factors(df_eigenschaften, factors_technik, kategorien_eigenschaften, Bev_data, technik)
 
-    return grid, factor_bbox
+    return buses, factor_bbox
 
 
 
-def technik_fill(grid, Technik, p_total):
+def technik_fill(buses, Technik, p_total):
     """
     Füllt das Grid-Objekt mit den Techniken basierend auf den gegebenen Anteilen.
     
@@ -200,11 +200,10 @@ def technik_fill(grid, Technik, p_total):
     """
 
     for tech, p in zip(Technik, p_total):
-        grid.buses = func.technik_sortieren(grid.buses, tech, p)
+        buses = func.technik_sortieren(buses, tech, p)
 
-    grid.buses = func.storage(grid.buses)
-    
-    return grid
+    buses = func.storage(buses)
+    return buses
 
 
 
@@ -220,7 +219,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_1",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969207",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,6,0,4,5,6,7,9,10,12,0,15,13,11,10,0,8,7,6,5,5,6,7], index=grid.snapshots))
+                p_set = pd.Series([8,7,6,0,4,5,6,7,9,10,12,0,15,13,11,10,0,8,7,6,5,5,6,7], index=grid.snapshots))
 
     grid.add("Load", "Load_2",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_28",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -230,7 +229,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_3",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969655",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,0,5,4,0,6,0,9,0,12,0,15,0,11,0,9,8,7,6,5,5,6,7], index=grid.snapshots))
+                p_set = pd.Series([8,7,0,5,4,0,6,0,9,0,12,0,15,0,11,0,9,8,7,6,5,5,6,7], index=grid.snapshots))
 
     grid.add("Load", "Load_4",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969221",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -240,7 +239,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_5",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28968489",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,6,5,4,5,6,7,0,0,0,0,15,0,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+                p_set = pd.Series([8,7,6,5,4,5,6,7,0,0,0,0,15,0,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
 
     grid.add("Load", "Load_6",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969176",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -250,7 +249,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_7",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969592",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,0,50,0,0,0,7,9,10,12,14,15,13,11,10,0,0,7,6,5,5,6,7], index=grid.snapshots))
+                p_set = pd.Series([8,7,0,50,0,0,0,7,9,10,12,14,15,13,11,10,0,0,7,6,5,5,6,7], index=grid.snapshots))
 
     grid.add("Load", "Load_8",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969224",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -260,7 +259,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_9",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969634",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,0,0,0,0,0,0,0,0,0], index=grid.snapshots))
+                p_set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,0,0,0,0,0,0,0,0,0], index=grid.snapshots))
 
     grid.add("Load", "Load_10",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_18",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -270,7 +269,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_11",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_14",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+                p_set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
 
     grid.add("Load", "Load_12",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969253",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -280,7 +279,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_13",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969616",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+                p_set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
 
     grid.add("Load", "Load_14",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_71",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -290,7 +289,7 @@ def loads_zuordnen(grid):
     grid.add("Load", "Load_15",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969777",       # in MW (bei Zeitreihe: Liste oder Serie)
                 carrier="AC", 
-                p__set = pd.Series([8,7,6,5,4,5,6,7,9,0,12,14,105,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
+                p_set = pd.Series([8,7,6,5,4,5,6,7,9,0,12,14,105,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
 
     grid.add("Load", "Load_16",
                 bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28968480",       # in MW (bei Zeitreihe: Liste oder Serie)
@@ -303,8 +302,8 @@ def loads_zuordnen(grid):
     solar_profile = pd.Series([0.9, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0, 0.8, 0, 0, 0, 0,
                             0, 0, 0, 0], index=grid.snapshots)
-    for gen in grid.generators.index[grid.generators['type'] == 'solar']:
-        grid.generators_t[gen, 'p_max_pu'] = solar_profile
+    solar_gens = grid.generators.index[grid.generators['type'] == 'solar']
+    grid.generators_t.p_max_pu[solar_gens] = pd.DataFrame([solar_profile.values]*len(solar_gens), columns=grid.snapshots, index=solar_gens).T
 
         
     return grid

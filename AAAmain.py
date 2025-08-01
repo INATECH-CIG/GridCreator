@@ -31,6 +31,8 @@ grids_dir = "grids"
 #Grid creation
 grid_1, bbox_1 = mf.ding0_grid(bbox, grids_dir, output_file_grid)
 
+# DataFrame für alle Daten erstellen
+buses_df = grid_1.buses
 
 """
 Check durch PLOT
@@ -54,8 +56,7 @@ plt.show()
 
 # OSM Daten
 buffer = 0.0002  # entspricht ungefähr 20 m
-grid_1_copy = grid_1.copy()
-grid_2, area, features = mf.osm_data(grid_1_copy, bbox_1, buffer)
+buses_df, area, features = mf.osm_data(grid_1, buses_df, bbox_1, buffer)
 
 # Bundesland-Daten
 gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
@@ -77,22 +78,20 @@ Daten gespeichert, um sie ab jetzt nur noch direkt in einem DataFrame zu laden, 
 # zensus.to_pickle('Zensus_daten_als_DataFrame.pkl')
 # zensus = pd.read_pickle('Zensus_daten_als_DataFrame.pkl')
 
-grid_2_copy = grid_2.copy()
-grid_3 = mf.daten_zuordnung(grid_2_copy, gpd_bundesland, zensus)
+buses_df = mf.daten_zuordnung(buses_df, gpd_bundesland, zensus)
 
 
-# Plot-Vorbereitung
 fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
 
 # Netzplot
-grid_2.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
+grid_1.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
 
 # OSM-Daten
 ox.plot_graph(area, ax=ax, show=False, close=False)
 features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.7)
 # Generatoren markieren
-generator_buses = grid_2.transformers['bus1'].unique()
-generator_coords = grid_2.buses.loc[generator_buses][['x', 'y']]
+generator_buses = grid_1.transformers['bus1'].unique()
+generator_coords = grid_1.buses.loc[generator_buses][['x', 'y']]
 ax.scatter(
     generator_coords['x'],
     generator_coords['y'],
@@ -101,7 +100,7 @@ ax.scatter(
     label='Generatoren',
     zorder=5      # überlagert andere Layer
 )
-bus_coords = grid_2.buses[['x', 'y']]
+bus_coords = grid_1.buses[['x', 'y']]
 ax.scatter(
     bus_coords['x'],
     bus_coords['y'],
@@ -128,10 +127,8 @@ Bev_data_Zensus = mf.bundesland_zensus(zensus, datei = "DE_VG5000.gpkg")
 Technik = ['solar']
 
 # Technik zuordnen
-grid_3_copy = grid_3.copy()
-grid_4, factor_bbox = mf.technik_zuordnen(grid_3_copy, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
-grid_4_copy = grid_4.copy()
-grid_5 = mf.technik_fill(grid_4_copy, Technik, factor_bbox)
+buses_df, factor_bbox = mf.technik_zuordnen(buses_df, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
+buses_df = mf.technik_fill(buses_df, Technik, factor_bbox*500)
 
 
 
@@ -144,19 +141,17 @@ Zeitreihen sind spezifischen buses zugeordnet!
 Funktioniert also auch nur für ausgewählte Koordinaten!
 '''
 
-grid_5_copy = grid_5.copy()
-grid_6 = mf.loads_zuordnen(grid_5_copy)
+grid_1 = mf.loads_zuordnen(grid_1)
 
 
 #%% STEP 5
 
 # Grid für pysa.optimze() vorbereiten
-grid_6_copy = grid_6.copy()
-grid_7 = mf.pypsa_vorbereiten(grid_6_copy)
+grid_1 = mf.pypsa_vorbereiten(grid_1)
 
 
 # .optimize()
-grid_7.optimize()
+grid_1.optimize()
 
 
 #%% Ergebnisse plotten
@@ -165,8 +160,8 @@ grid_7.optimize()
 cmap = plt.colormaps.get_cmap('coolwarm')  # Neue API für Colormap
 
 # Zeitschritte einzelnd plotten
-for i, snapshot in enumerate(grid_7.snapshots):
-    pf = grid_7.lines_t.p0.loc[snapshot]
+for i, snapshot in enumerate(grid_1.snapshots):
+    pf = grid_1.lines_t.p0.loc[snapshot]
 
     # Normalisieren
     norm = colors.Normalize(vmin=pf.min(), vmax=pf.max())
@@ -174,7 +169,7 @@ for i, snapshot in enumerate(grid_7.snapshots):
 
     # Plot erstellen
     fig, ax = plt.subplots(figsize=(6, 6))
-    plot_dict = grid_7.plot.map(line_colors=line_colors, bus_sizes=1e-9, line_widths=2)
+    plot_dict = grid_1.plot.map(line_colors=line_colors, bus_sizes=1e-9, line_widths=2)
     plt.title(f"Power Flow - Stunde {i}")
 
     # Farbskala hinzufügen
@@ -193,11 +188,11 @@ ax.set_xlabel("Stunde")
 ax.set_ylabel("Leistung [MW]")
 
 # Nur Generatoren mit carrier "gas"
-gas_generators = grid_7.generators[grid_7.generators.carrier == "gas"]
+gas_generators = grid_1.generators[grid_1.generators.carrier == "gas"]
 
 # Für jeden dieser Generatoren die Zeitreihe plotten
 for name in gas_generators.index:
-    ax.plot(grid_7.generators_t.p.index, grid_7.generators_t.p[name], label=name)
+    ax.plot(grid_1.generators_t.p.index, grid_1.generators_t.p[name], label=name)
 
 ax.axhline(0, color="gray", linewidth=0.5)
 ax.legend(fontsize="small", loc="upper right", bbox_to_anchor=(1.3, 1.0))
