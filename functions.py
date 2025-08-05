@@ -399,12 +399,11 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
 
     summen = sum_mw(df.iloc[:, 1:])
     erste_spalte = {df.columns[0]: df.iloc[0, 0]}
-    # neue_zeile = {**erste_spalte, **summen.to_dict()}
     neue_zeile = {**erste_spalte, **summen.iloc[0].to_dict()}    
     zeile = pd.DataFrame([neue_zeile])
 
-
-    faktor_bbox = gewichtungsfaktor(land, kategorien_eigenschaften, factors, zeile.iloc[0], technik_faktoren, gesamtgewicht_dict)
+    land_bbox = zeile.iloc[0]['lan_name']
+    faktor_bbox = gewichtungsfaktor(land_bbox, kategorien_eigenschaften, factors, zeile.iloc[0], technik_faktoren, gesamtgewicht_dict)
 
     return faktor_pro_bus, faktor_bbox
 
@@ -433,7 +432,6 @@ def technik_sortieren(buses, Technik, p_total):
         p_bbox = buses.loc[mask_type1, "p_nom_1"].sum(min_count=1)
         amount = mask_type1.sum()
         p_mean = p_bbox / amount if amount > 0 else 0
-        print('Power für', Technik, ':', p_mean)
         # Buses sortieren, ohne Buses mit Solartechnik
         bus_sorted = buses[(buses['p_nom_1'].isna()) & (buses['type_1'] != Technik)].copy()
         bus_sorted = bus_sorted.sort_values(by=['Factor_'+Technik], ascending = False)
@@ -453,7 +451,6 @@ def technik_sortieren(buses, Technik, p_total):
         technik_bbox = 5
         amount = len(buses)/technik_bbox
         p_mean = p_total / amount if amount > 0 else 0
-        print('Power für', Technik, ':', p_mean)
         # Buses sortieren
         bus_sorted = buses.sort_values(by=['Factor_'+Technik], ascending = False)
     
@@ -477,8 +474,6 @@ def technik_sortieren(buses, Technik, p_total):
     # Buses die Technik bekommen
     to_fill = bus_sorted.index.tolist()
 
-    print('Anzahl der zu füllenden Busse:', len(to_fill))
-
     # Alte vorhandene Werte übernehmen (nur aus type_1 mit passender Technik)
 
     verteilte_leistung = 0.0
@@ -488,7 +483,6 @@ def technik_sortieren(buses, Technik, p_total):
             break
         buses.at[idx, 'Power_' + Technik] = p_mean
         verteilte_leistung += p_mean
-    print('Verteilte Leistung:', verteilte_leistung, 'für Technik:', Technik)
 
     return buses
 
