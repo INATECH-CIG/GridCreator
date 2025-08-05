@@ -253,25 +253,17 @@ def load_shapes(datei):
 
     return laender_3035
 
-"""
-NICHT ANWENDBAR !!!!
-NEUER MECHANISMUS WICHTIG
 
-Zensus_Fernheizung sind Zahlen zwischen 0 un 100, aber absolut und nicht relativ!
-Zensus_Etagenheizung enthält Zahlen größer 100 -> kann auch Glück haben
-
-Wie unterscheide ich also sicher automatisch zwischen MW und SUMME?
-"""
 def sum_mw(df):
     """
-    Bildet den Mittelwert der Werte in einem DataFrame, für Spalten mit Werten zwischen 0 und 1 oder 0 und 100.
-    Ansonsten bildet es die Summe der Werte.
-
+    Summiert die Werte in einem DataFrame und berechnet den Mittelwert für Spalten,
+    die mit '_mw' enden. Für andere Spalten wird die Summe berechnet
+    
     Args:
         df (pd.DataFrame): DataFrame mit den zu summierenden Werten.
         
     Returns:
-        pd.DataFrame: Ein DataFrame mit der Summe der Werte für jede Spalte.
+        pd.DataFrame: Ein DataFrame mit den summierten Werten.
     """
 
     result = pd.DataFrame(columns=df.columns)
@@ -404,11 +396,7 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
 
         faktor_pro_bus.at[idx] = gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_faktoren, gesamtgewicht_dict)
 
-    # Berechnung von Zensus-Gesamt bbox
-    # Lässt sich eventuell mit bundesland zensus [bundesland_zensus()] verbinden?
-    # Ja siehe ChatGPT: ZENSUS VERBINDEN
-    # summen müsste angepasst werden: Funktionsaufruf für MW oder SUMME
-    # summen = df.iloc[:, 1:].sum()
+
     summen = sum_mw(df.iloc[:, 1:])
     erste_spalte = {df.columns[0]: df.iloc[0, 0]}
     # neue_zeile = {**erste_spalte, **summen.to_dict()}
@@ -424,56 +412,86 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
 
 def technik_sortieren(buses, Technik, p_total):
     """
-    Füllt das Grid-Objekt mit der angegebenen Technik basierend auf den gegebenen Anteilen.
+    Sortiert die Busse nach der Technik und verteilt die Leistung gleichmäßig auf die Busse
+    
     Args:
-        grid (pypsa.Network): Das Grid-Objekt, das die Buslinien enthält.
-        Technik (str): Die Technik, die zugeordnet werden soll.
-        p_total (float): Der Gesamtanteil, der der Technik zugeordnet werden soll.
+        buses (pd.DataFrame): DataFrame mit den Busdaten.
+        Technik (str): Die Technik, die verteilt werden soll.
+        p_total (float): Die gesamte Leistung, die verteilt werden soll.
         
     Returns:
-        pypsa.Network: Das aktualisierte Grid-Objekt mit den zugeordneten Techniken.
+        pd.DataFrame: DataFrame mit den verteilten Leistungen für die Technik.
     """
 
-    type1 = buses["type_1"] == Technik
-    p_bbox = buses.loc[type1, "p_nom_1"].sum(min_count=1)
-    amount = type1.sum()
+    # Neue Spalte vorbereiten
+    buses['Power_' + Technik] = 0.0  # Initialisierung mit 0
 
-    if "type_2" in buses.columns:
-        type2 = buses["type_2"] == Technik
-        p_bbox += buses.loc[type2, "p_nom_2"].dropna().sum()
-        amount += type2.sum()
+
+    if Technik == 'solar':
+        # power und gesamtzahl von Technik in bbox
+        mask_type1 = buses["type_1"] == Technik
+        p_bbox = buses.loc[mask_type1, "p_nom_1"].sum(min_count=1)
+        amount = mask_type1.sum()
+        p_mean = p_bbox / amount if amount > 0 else 0
+        print('Power für', Technik, ':', p_mean)
+        # Buses sortieren, ohne Buses mit Solartechnik
+        bus_sorted = buses[(buses['p_nom_1'].isna()) & (buses['type_1'] != Technik)].copy()
+        bus_sorted = bus_sorted.sort_values(by=['Factor_'+Technik], ascending = False)
+        
+        # Vorhandene Solar in neue Spalte überschreiben
+        buses.loc[mask_type1, 'Power_' + Technik] = buses.loc[mask_type1, 'p_nom_1']
+        buses['Power_' + Technik] = buses['Power_' + Technik].fillna(0)
+
+    else:
+        p_bbox = 0
+        """
+        Wert muss für E-Car und HP definiert werden, möglichst genau für jede bbox
+        E-Car: 5km Raster/Einwohner * Einwohner bbox
+        HP für Landkreis?
+        """
+        # Zu verteilende Technik
+        technik_bbox = 5
+        amount = len(buses)/technik_bbox
+        p_mean = p_total / amount if amount > 0 else 0
+        print('Power für', Technik, ':', p_mean)
+        # Buses sortieren
+        bus_sorted = buses.sort_values(by=['Factor_'+Technik], ascending = False)
+    
+
 
     # Falls keine Busse mit Technik gefunden wurden:
     if amount == 0:
+        print("Keine Busse mit der Technik gefunden:", Technik)
         return buses
     
-
 
     # Leistung, die noch verteilt werden muss
     p_rest = p_total - p_bbox
     if p_rest <= 0:
         # Alles verteilt, nichts zu tun
+        print("Keine Leistung zu verteilen für Technik:", Technik)
+        print("Vorhandene Leistung:", p_bbox, "Gesamtleistung:", p_total)
         return buses
-    
-    # Mittelwert der vorhandenen Leistung pro Bus
-    p_mean = p_bbox / amount if amount > 0 else 0
 
 
-    bus_sorted = buses[(buses['p_nom_1'].isna()) & (buses['type_1'] != Technik)].copy()
-    bus_sorted = bus_sorted.sort_values(by=['Factor_'+Technik], ascending = False)
-    #to_fill = bus_sorted[bus_sorted['p_nom_1'].isna()].index.tolist()
+    # Buses die Technik bekommen
     to_fill = bus_sorted.index.tolist()
 
+    print('Anzahl der zu füllenden Busse:', len(to_fill))
 
-    verteilte_leistung = 0
+    # Alte vorhandene Werte übernehmen (nur aus type_1 mit passender Technik)
+
+    verteilte_leistung = 0.0
 
     for idx in to_fill:
         if verteilte_leistung + p_mean > p_rest:
             break
-        buses.at[idx, 'p_nom_1'] = p_mean
+        buses.at[idx, 'Power_' + Technik] = p_mean
         verteilte_leistung += p_mean
+    print('Verteilte Leistung:', verteilte_leistung, 'für Technik:', Technik)
 
     return buses
+
 
 def storage(buses):
     """
@@ -487,7 +505,7 @@ def storage(buses):
     """
     
     '''
-    Prob kann noch mit MArtstammdatenregister angepasst werden. Verhältnis für jede PLZ bestimmen
+    Prob kann noch mit Martstammdatenregister angepasst werden. Verhältnis für jede PLZ bestimmen
     '''
     prob = 0.8 # 80% der Solaranlagen haben einen Speicher
     
@@ -495,11 +513,8 @@ def storage(buses):
     buses = buses.copy()
     buses['speicher'] = 0.0
     # Für alle Zeilen mit 'solar' in 'type_1' den Wert 5 setzen
-    solar_index = buses[buses['p_nom_1'].notna()].sample(frac=prob).index
-    buses.loc[solar_index, 'speicher'] = buses.loc[solar_index, 'p_nom_1'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
+    solar_index = buses[buses['Power_solar'] != 0].sample(frac=prob).index
+    buses.loc[solar_index, 'speicher'] = buses.loc[solar_index, 'Power_solar'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
 
-    # Für alle Zeilen mit 'solar' in 'type_2' den Wert des Speichers ergänzen, falls ein Speicher vorhanden ist
-    if "p_nom_2" in buses.columns:
-        buses.loc[buses['p_nom_2'].notna(), 'speicher'] += buses.loc[buses['p_nom_2'].notna(), 'p_nom_2'] * 1
-     
+
     return buses

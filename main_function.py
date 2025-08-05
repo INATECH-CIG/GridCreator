@@ -201,13 +201,14 @@ def technik_fill(buses, Technik, p_total):
 
     for tech, p in zip(Technik, p_total):
         buses = func.technik_sortieren(buses, tech, p)
-
+        
     buses = func.storage(buses)
+
     return buses
 
 
 
-def loads_zuordnen(grid):
+def loads_zuordnen(grid, buses):
     
     # Powerflow zu bestehendem Netz
     grid.pf()
@@ -298,12 +299,42 @@ def loads_zuordnen(grid):
 
     grid.loads['carrier'] = 'AC'
 
+    print("Lasten hinzugefügt.")
+
+    solar_buses = buses.index[buses["p_nom_1"].notna()]
+    for bus in solar_buses:
+        print(f"Prüfe, ob Generator für {bus} existiert...")
+        existing = grid.generators[(grid.generators['bus'] == bus)]
+        if existing.empty:
+
+            grid.add("Generator",
+                    name=bus + "_solar",
+                    bus=bus,
+                    carrier="solar",
+                    type="solar")
+            print(f"Generator {bus}_solar hinzugefügt.")
+
+        else:
+            print(f"Generator für {bus} existiert bereits.")
+
+
+
+
+
     # Wetter sollte schon hinzugefügt sein, hier nur Beispielwerte
-    solar_profile = pd.Series([0.9, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0.8, 0, 0, 0, 0,
-                            0, 0, 0, 0], index=grid.snapshots)
-    solar_gens = grid.generators.index[grid.generators['type'] == 'solar']
-    grid.generators_t.p_max_pu[solar_gens] = pd.DataFrame([solar_profile.values]*len(solar_gens), columns=grid.snapshots, index=solar_gens).T
+    # In Prozent als Anteil der möglichen maximal Leistung
+    solar_profile = pd.Series([0.9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.8, 0, 0, 0, 0, 0, 0, 0, 0], index=grid.snapshots)
+
+    solar_buses = buses.index[buses["p_nom_1"].notna() & (buses['type_1'] == 'solar')]
+    solar_gens = grid.generators.index[grid.generators['bus'].isin(solar_buses)]
+
+    p_nom_vals = grid.generators.loc[solar_gens, 'bus'].map(buses['p_nom_1'])
+
+    # 4. Für jeden Generator ein skaliertes Profil erzeugen
+    scaled_profiles = pd.DataFrame(np.outer(solar_profile.values, p_nom_vals), index=grid.snapshots, columns=solar_gens)
+
+    # 5. Zuweisung des skalierten Profils an p_max_pu
+    grid.generators_t.p_max_pu[solar_gens] = scaled_profiles
 
         
     return grid

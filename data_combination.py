@@ -6,13 +6,56 @@ from shapely.geometry import Point
 import networkx as nx
 
 
+def generator_duplikate_zusammenfassen(grid):
+    """
+    Fasst Generatoren am gleichen Bus mit gleichem Typ (carrier) zusammen.
+    Addiert p_nom und ersetzt Mehrfacheinträge durch einen einzigen.
+    """
+    gens = grid.generators
+
+    # Gruppieren nach bus UND carrier (oder type, falls du das willst)
+    grouped = gens.groupby(['bus', 'type'])
+
+    new_generators = []
+
+    for (bus, type), group in grouped:
+        p_nom_sum = group['p_nom'].sum()
+        new_generators.append({
+            'name': f"{bus}_{type}",
+            'bus': bus,
+            'type': type,
+            'carrier': group['carrier'].iloc[0],  # Nimm den Carrier des ersten Eintrags
+            'p_nom': p_nom_sum
+        })
+
+    # Lösche alte Generatoren
+    grid.generators.drop(index=grid.generators.index, inplace=True)
+
+    # Neue Generatoren hinzufügen
+    for gen in new_generators:
+        grid.add("Generator", **gen)
+
+    print("Duplikat-Generatoren wurden zusammengefasst.")
+
+    return grid
+
 def data_combination(ding0, buses_df, osm):
+
+    # Doppeltte Generatoren werden zu einem zusammengefasst
+    ding0 = generator_duplikate_zusammenfassen(ding0)
+
+    
+    # ding0 Generators den buses zuordnen
 
     # Alle Zeilen von Generator nach "bus" gruppieren
     grouped = ding0.generators.groupby("bus")
 
     # Jede Gruppe zu einer einzelnen Zeile "entfalten"
     # mit Spaltennamen
+    """
+    Es sollte nur ein Generator pro Gruppe  sein, weil slar zusammengefasst ist und keine anderen Generatoren lv sind!!
+    Zur Sicherheit bleibt Schleife bestehen, im folgenden wird aber nur mit type_1 gearbeitet!
+    """
     rows = {}
     for name, group in grouped:
         group = group.drop(columns="bus").reset_index(drop=True)
@@ -30,6 +73,8 @@ def data_combination(ding0, buses_df, osm):
     # Mit df_A verbinden
     buses_df = ding0.buses.join(generators_flat)
 
+
+    # Matching osm und ding0
 
     # Nur end-buses für matching verwenden
     # Graph aufbauen

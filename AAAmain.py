@@ -124,7 +124,7 @@ plt.show()
 Bev_data_Zensus = mf.bundesland_zensus(zensus, datei = "DE_VG5000.gpkg")
 
 # Technik definieren
-Technik = ['solar']
+Technik = ['solar', 'HP_ambient', 'HP_geothermal', 'E_car']
 
 # Technik zuordnen
 buses_df, factor_bbox = mf.technik_zuordnen(buses_df, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
@@ -141,7 +141,7 @@ Zeitreihen sind spezifischen buses zugeordnet!
 Funktioniert also auch nur für ausgewählte Koordinaten!
 '''
 
-grid_1 = mf.loads_zuordnen(grid_1)
+grid_1 = mf.loads_zuordnen(grid_1, buses_df)
 
 
 #%% STEP 5
