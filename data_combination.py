@@ -35,7 +35,6 @@ def generator_duplikate_zusammenfassen(grid):
     for gen in new_generators:
         grid.add("Generator", **gen)
 
-    print("Duplikat-Generatoren wurden zusammengefasst.")
 
     return grid
 

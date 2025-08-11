@@ -127,7 +127,11 @@ Bev_data_Zensus = mf.bundesland_zensus(zensus, datei = "DE_VG5000.gpkg")
 Technik = ['solar', 'HP_ambient', 'HP_geothermal', 'E_car']
 
 # Technik zuordnen
-buses_df, factor_bbox = mf.technik_zuordnen(buses_df, data.faktoren_technik, data.kategorien_eigenschaften,  Bev_data_Zensus, data.Bev_data_Technik, Technik)
+file_Faktoren = "Faktoren.csv"
+file_Technik = "Bev_data_Technik.csv"
+buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, data.kategorien_eigenschaften,  Bev_data_Zensus, file_Technik, Technik)
+
+# Technik in buses_df einfügen
 buses_df = mf.technik_fill(buses_df, Technik, factor_bbox*500)
 
 
@@ -150,7 +154,7 @@ grid_1 = mf.loads_zuordnen(grid_1, buses_df)
 grid_1 = mf.pypsa_vorbereiten(grid_1)
 
 
-# .optimize()
+#%% .optimize()
 grid_1.optimize()
 
 

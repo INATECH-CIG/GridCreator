@@ -36,6 +36,18 @@ Bev_data_Zensus = pd.DataFrame({
     'Zensus_Eigentuemerquote': [0.3, 0.4, 0.5, 0.6]
 })
 
+agg_dict={
+    'Zensus_Fernheizung': 'sum',
+    'Zensus_Etagenheizung': 'sum',
+    'Zensus_Blockheizung': 'sum',
+    'Zensus_Zentralheizung': 'sum',
+    'Zensus_Einzel_Mehrraumoefen': 'sum',
+    'Zensus_keine_Heizung': 'sum',
+
+    'Zensus_durchschnMieteQM': 'mean',
+    'Zensus_Eigentuemerquote': 'mean'
+    }
+
 """
 Hier darf mehr stehen
 """
@@ -119,8 +131,8 @@ Allgemeine Definition, unabhängig von allem
 Alles was hier steht, muss überall vorkommen
 """
 kategorien_eigenschaften = pd.DataFrame({
-    'Heizung': ['Zensus_Fernheizung_sum', 'Zensus_Etagenheizung_sum', 'Zensus_Blockheizung_sum', 'Zensus_Zentralheizung_sum', 'Zensus_Einzel_Mehrraumoefen_sum', 'Zensus_keine_Heizung_sum'],
-    'Miete': ['Zensus_durchschnMieteQM_mw', 'Zensus_Eigentuemerquote_mw', None, None, None, None]
+    'Heizung': ['Zensus_Fernheizung', 'Zensus_Etagenheizung', 'Zensus_Blockheizung', 'Zensus_Zentralheizung', 'Zensus_Einzel_Mehrraumoefen', 'Zensus_keine_Heizung'],
+    'Miete': ['Zensus_durchschnMieteQM', 'Zensus_Eigentuemerquote', None, None, None, None]
 })
 
 

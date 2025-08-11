@@ -9,6 +9,8 @@ import numpy as np
 import json
 from tqdm import tqdm
 from functools import reduce
+import numpy as np
+from data import agg_dict
 
 #%% Funktionen zum aufrufen
 
@@ -168,17 +170,9 @@ def zensus_df_verbinden(daten_zensus):
     # Sicherstellen, dass alle DFs die gleichen drei Schlüsselspalten haben
     basis_spalten = ["GITTER_ID_100m", "x_mp_100m", "y_mp_100m"]
 
-    # Alle DFs vorbereiten (nur einmalige ID-Spalten behalten)
-    df_bereinigt = []
-    for df in tqdm(daten_zensus, desc="DataFrames bereinigen"):
-        # Doppelte Spalten entfernen, außer den 3 gemeinsamen
-        eigene_spalten = [col for col in df.columns if col not in basis_spalten]
-        df_neu = df[basis_spalten + eigene_spalten]
-        df_bereinigt.append(df_neu)
-
     # DataFrames per GITTER_ID_100m zusammenführen
-    df_vereint = reduce(lambda left, right: pd.merge(left, right, on=basis_spalten, how='outer'), df_bereinigt)
-
+    df_vereint = reduce(lambda left, right: pd.merge(left, right, on=basis_spalten, how='outer'), daten_zensus)
+    df_vereint = df_vereint.rename(columns={col: f"Zensus_{col}" for col in df_vereint.columns if col not in basis_spalten})
     return df_vereint
 
 
@@ -209,7 +203,7 @@ def daten_zuordnen(net_buses, data):
     distances, indices = tree.query(query_points)
 
     # Spaltennamen ändern
-    data = data.rename(columns=lambda col: f"Zensus_{col}").copy()
+    # data = data.rename(columns=lambda col: f"Zensus_{col}").copy()
     
     # Passende Zeilen aus data holen
     matched_data = data.iloc[indices].copy()
@@ -254,30 +248,30 @@ def load_shapes(datei):
     return laender_3035
 
 
-def sum_mw(df):
-    """
-    Summiert die Werte in einem DataFrame und berechnet den Mittelwert für Spalten,
-    die mit '_mw' enden. Für andere Spalten wird die Summe berechnet
+# def sum_mw(df):
+#     """
+#     Summiert die Werte in einem DataFrame und berechnet den Mittelwert für Spalten,
+#     die mit '_mw' enden. Für andere Spalten wird die Summe berechnet
     
-    Args:
-        df (pd.DataFrame): DataFrame mit den zu summierenden Werten.
+#     Args:
+#         df (pd.DataFrame): DataFrame mit den zu summierenden Werten.
         
-    Returns:
-        pd.DataFrame: Ein DataFrame mit den summierten Werten.
-    """
+#     Returns:
+#         pd.DataFrame: Ein DataFrame mit den summierten Werten.
+#     """
 
-    result = pd.DataFrame(columns=df.columns)
-    row = {}
+#     result = pd.DataFrame(columns=df.columns)
+#     row = {}
 
-    for col in df.columns:
-        values = df[col]
-        if col.endswith('_mw'):
-            row[col] = values.mean()
-        else:
-            row[col] = values.sum()
+#     for col in df.columns:
+#         values = df[col]
+#         if col.endswith('_mw'):
+#             row[col] = values.mean()
+#         else:
+#             row[col] = values.sum()
 
-    result.loc[0] = row
-    return result
+#     result.loc[0] = row
+#     return result
 
 
 
@@ -292,25 +286,21 @@ def bundesland_zuordnung(zensus, shapes):
         pd.DataFrame: Ein DataFrame mit den zugeordneten Bundesland-Daten."""
 
     # Zensusdaten vorbereiten -> Georeferenz einbauen 
-    spalten_liste = zensus.columns[3:].tolist()
     zensus['geometry'] = gpd.points_from_xy(zensus['x_mp_100m'], zensus['y_mp_100m'])
-    gdf_punkte = gpd.GeoDataFrame(zensus, geometry=zensus['geometry'], crs='EPSG:3035').copy()
+    gdf_zensus = gpd.GeoDataFrame(zensus, geometry=zensus['geometry'], crs='EPSG:3035').copy()
 
     # Daten verbinden
-    punkte_mit_bl = gpd.sjoin(gdf_punkte, shapes, how='left', predicate='within')
-    punkte_mit_bl[spalten_liste] = punkte_mit_bl[spalten_liste].apply(lambda col: pd.to_numeric(col.astype(str).str.replace(',', '.', regex=False), errors='coerce')).fillna(0.0)
-
+    zensus_mit_land = gpd.sjoin(gdf_zensus, shapes, how='left', predicate='within')
+    zensus_mit_land[list(agg_dict.keys())] = zensus_mit_land[list(agg_dict.keys())].apply(lambda col: pd.to_numeric(col.astype(str).str.replace(',', '.', regex=False), errors='coerce'))
+    zensus_mit_land[list(agg_dict.keys())] = zensus_mit_land[list(agg_dict.keys())].fillna(0.0)
     # Jetzt gruppieren und aufsummieren
     # Statt reines aufsummieren Funktionsaufruf für MW oder SUMME
     # Also erst gruppieren und dann einzelne gruppen aufsummieren in for schleife?
     # Eine Gruppe/Bundesland = bbox
 
     #ergebnis = punkte_mit_bl.groupby('GEN')[spalten_liste].sum(min_count=1).reset_index()
-
-    ergebnis = punkte_mit_bl.groupby('GEN')[spalten_liste].apply(sum_mw).reset_index()
-
-    # Spalten umbenennen
-    ergebnis.columns = [ergebnis.columns[0]] + [f"Zensus_{col}" for col in ergebnis.columns[1:]]
+    zensus_mit_land = zensus_mit_land[["GEN"] + list(agg_dict.keys())]
+    ergebnis = zensus_mit_land.groupby('GEN').agg(agg_dict).reset_index()
 
     return ergebnis
 
@@ -336,9 +326,9 @@ def gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_fakt
     for kat in kategorien_eigenschaften.columns:
         # Filtere die Eigenschaften für die aktuelle Kategorie
         eigenschaften = kategorien_eigenschaften[kat].dropna()
-
+        print(f"Berechne Gewichtungsfaktor für {land} in Kategorie {kat} mit Eigenschaften: {eigenschaften.tolist()}")
         # hole nur die relevanten Faktoren und Werte
-        faktoren_kat = pd.Series({attr: factors[kat][attr] for attr in eigenschaften})
+        faktoren_kat = [factors[attr] for attr in eigenschaften]
         werte_kat = row[eigenschaften]
 
         # numerische Multiplikation
@@ -380,7 +370,7 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
     gesamtgewicht_dict = {}
     for kat in kategorien_eigenschaften.columns:
         eigenschaften = kategorien_eigenschaften[kat].dropna()
-        faktoren_kat = pd.Series({attr: factors[kat][attr] for attr in eigenschaften})
+        faktoren_kat = [factors[attr] for attr in eigenschaften]
         
         for land in Bev_data.index:
             land_werte = Bev_data.loc[land, eigenschaften]
@@ -397,9 +387,10 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
         faktor_pro_bus.at[idx] = gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_faktoren, gesamtgewicht_dict)
 
 
-    summen = sum_mw(df.iloc[:, 1:])
+    # Berechnung für Bundesland
+    summen = df.iloc[:, 1:].agg(agg_dict)
     erste_spalte = {df.columns[0]: df.iloc[0, 0]}
-    neue_zeile = {**erste_spalte, **summen.iloc[0].to_dict()}    
+    neue_zeile = {**erste_spalte, **summen.to_dict()}    
     zeile = pd.DataFrame([neue_zeile])
 
     land_bbox = zeile.iloc[0]['lan_name']
@@ -449,7 +440,7 @@ def technik_sortieren(buses, Technik, p_total):
         """
         # Zu verteilende Technik
         technik_bbox = 5
-        amount = len(buses)/technik_bbox
+        amount = len(buses)/technik_bbox if technik_bbox > 0 else 0
         p_mean = p_total / amount if amount > 0 else 0
         # Buses sortieren
         bus_sorted = buses.sort_values(by=['Factor_'+Technik], ascending = False)
@@ -506,7 +497,7 @@ def storage(buses):
     # np.random.seed(seed) # Setze einen Seed für Reproduzierbarkeit
     buses = buses.copy()
     buses['speicher'] = 0.0
-    # Für alle Zeilen mit 'solar' in 'type_1' den Wert 5 setzen
+    # Für alle Zeilen mit Power_solar, Speicherkapazität = Power_solar * 1
     solar_index = buses[buses['Power_solar'] != 0].sample(frac=prob).index
     buses.loc[solar_index, 'speicher'] = buses.loc[solar_index, 'Power_solar'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
 

@@ -6,7 +6,11 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import os
-
+import demand_and_load as demand_load
+from pycity_base.classes.timer import Timer
+from pycity_base.classes.weather import Weather
+from pycity_base.classes.prices import Prices
+from pycity_base.classes.environment import Environment
 
 
 def daten_laden(ordner):
@@ -21,22 +25,15 @@ def daten_laden(ordner):
     """
     # Manuell laden
     pd_Zensus_Bevoelkerung_100m = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
-    pd_Zensus_Bevoelkerung_100m.rename(columns={"Einwohner": "Einwohner_sum"}, inplace=True)
 
     pd_Zensus_Durchschn_Nettokaltmiete_100m = pd.read_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_100m-Gitter.csv", sep=";")
-    pd_Zensus_Durchschn_Nettokaltmiete_100m.rename(columns={"durchschnMieteQM": "durchschnMieteQM_mw"}, inplace=True)
+    
 
     pd_Zensus_Eigentuemerquote_100m = pd.read_csv(ordner + "/Zensus2022_Eigentuemerquote_100m-Gitter.csv", sep=";")
-    pd_Zensus_Eigentuemerquote_100m.rename(columns={"Eigentuemerquote": "Eigentuemerquote_mw"}, inplace=True)
+    
 
     pd_Zensus_Heizungsart_100m = pd.read_csv(ordner + "/Zensus2022_Heizungsart_100m-Gitter.csv", sep=";", encoding="cp1252")
-    pd_Zensus_Heizungsart_100m.rename(columns={"Insgesamt_Heizungsart": "Insgesamt_Heizungsart_sum",
-                                               "Fernheizung": "Fernheizung_sum",
-                                               "Etagenheizung": "Etagenheizung_sum",
-                                               "Blockheizung": "Blockheizung_sum",
-                                               "Zentralheizung": "Zentralheizung_sum",
-                                               "Einzel_Mehrraumoefen": "Einzel_Mehrraumoefen_sum",
-                                               "keine_Heizung": "keine_Heizung_sum"}, inplace=True)
+    
 
     # Zensus Daten in Liste umwandeln
     data = [pd_Zensus_Bevoelkerung_100m, pd_Zensus_Heizungsart_100m, pd_Zensus_Durchschn_Nettokaltmiete_100m, pd_Zensus_Eigentuemerquote_100m]
@@ -152,7 +149,7 @@ def bundesland_zensus(zensus, datei):
 
 
 
-def technik_zuordnen(buses, factors, kategorien_eigenschaften, Bev_data_Zensus, Bev_data_Technik, technik_arr):
+def technik_zuordnen(buses, file_Faktoren, kategorien_eigenschaften, Bev_data_Zensus, file_Technik, technik_arr):
     """
     Ordnet den Bussen im Grid verschiedene Techniken zu und berechnet die entsprechenden Faktoren.
     Args:
@@ -167,6 +164,10 @@ def technik_zuordnen(buses, factors, kategorien_eigenschaften, Bev_data_Zensus, 
         tuple: Ein Tupel bestehend aus dem aktualisierten Grid-Objekt und einem Array der Faktor-Bounding Box.
     """
 
+    Technik_Faktoren = pd.read_csv(file_Faktoren, sep=";")
+    Technik_Faktoren = Technik_Faktoren.set_index("Technik")
+    Bev_data_Technik = pd.read_csv(file_Technik, sep=",")
+
     Bev_data = pd.merge(Bev_data_Zensus, Bev_data_Technik, on="GEN", how="left")
 
     df_land = buses['lan_name'].copy().to_frame()
@@ -179,7 +180,9 @@ def technik_zuordnen(buses, factors, kategorien_eigenschaften, Bev_data_Zensus, 
 
     factor_bbox = np.array([0.0] * len(technik_arr))
     for i, technik in enumerate(technik_arr):
-        factors_technik = factors[technik]
+        print(f"Berechne Faktoren für {technik}...")
+        factors_technik = Technik_Faktoren.loc[technik]
+        print('Berechne Faktoren für', factors_technik)
         buses['Factor_' + technik], factor_bbox[i] = func.calculate_factors(df_eigenschaften, factors_technik, kategorien_eigenschaften, Bev_data, technik)
 
     return buses, factor_bbox
@@ -208,135 +211,157 @@ def technik_fill(buses, Technik, p_total):
 
 
 
-def loads_zuordnen(grid, buses):
+def loads_zuordnen(grid, buses, env=None):
+    if env is None:
+        timer = Timer(
+            time_discretization=3600,         # 1 Stunde in Sekunden
+            timesteps_horizon=8760,
+            timesteps_used_horizon=8760,
+            timesteps_total=24*365)  # Stunden * Tage im Jahr 
+        """
+        as Python-Paket richardsonpy der RWTH Aachen generiert standardmäßig stochastische
+        Lastprofile für ein Jahr. Diese Profile basieren auf typischen Nutzungsdaten und
+        werden in stündlicher Auflösung erstellt. Die erzeugten Daten umfassen somit
+        8.760 Stunden pro Jahr.
+        """            
+        
+        """
+        Wetter könnte wie bei Haus gemacht werden, aber eig unnötig, weil davor env ertsellt wurde
+        """
+        weather = Weather(timer)
+        prices = Prices()
+        environment = Environment(timer, weather, prices)
+    else:
+        environment = env
+        
     
     # Powerflow zu bestehendem Netz
     grid.pf()
 
     # Zeit sollte auch schon integriert sein, wenn Lasten schon im Netz sind
-    grid.set_snapshots(range(24))  # z.B. 24 Stunden
+    """
+    Angepasst an env ?????
+    """
+    start_time = pd.Timestamp("2023-01-01 00:00:00")
+    snapshots = pd.date_range(start=start_time, periods=timer.timesteps_total, freq=f"{int(timer.time_discretization/60)}min")
+
+    grid.set_snapshots(snapshots)
+
+
+
 
     # Lasten sollten schon im Netz integriert sein, hier nur Beispielwerte
-    grid.add("Load", "Load_1",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969207",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,6,0,4,5,6,7,9,10,12,0,15,13,11,10,0,8,7,6,5,5,6,7], index=grid.snapshots))
+    """
+    Alle Loads erstmal löschen? Weil von ding0 und dann alle einheitlich?
+    """
+    # for bus in buses.index:
+    #     print(f"Prüfe, ob Load für {bus} existiert...")
+    #     existing = grid.loads[(grid.loads['bus'] == bus)]
+    #     if existing.empty:
+    #         # Lasten hinzufügen
+    #         """
+    #         Max. allowed number of occupants per apartment is 5
+    #         """
+    #         # power = demand_load.create_haus(people=buses.loc[bus, 'Zensus_Einwohner_sum'], env=environment)
+    #         power, occupants = demand_load.create_haus(people=3, index=snapshots, env=environment)
+    #         # Hier wird angenommen, dass p_set eine Serie ist, die die Lasten für jede Stunde enthält
+    #         # power = pd.Series(power[:len(grid.snapshots)], index=grid.snapshots)
+    #         print("Snapshots grid:", grid.snapshots)
+    #         print("Index power:", power.index)
+    #         print("Sind sie gleich? ", power.index.equals(grid.snapshots))
 
-    grid.add("Load", "Load_2",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_28",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([18,17,16,15,14,15,16,17,19,20,22,24,25,23,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
-
-    grid.add("Load", "Load_3",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969655",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,0,5,4,0,6,0,9,0,12,0,15,0,11,0,9,8,7,6,5,5,6,7], index=grid.snapshots))
-
-    grid.add("Load", "Load_4",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969221",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([18,0,0,0,14,15,16,17,19,20,22,0,25,0,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
-
-    grid.add("Load", "Load_5",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28968489",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,6,5,4,5,6,7,0,0,0,0,15,0,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
-
-    grid.add("Load", "Load_6",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969176",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([18,17,16,15,0,0,0,0,0,20,22,24,25,23,0,0,0,0,17,16,15,15,16,17], index=grid.snapshots))
-
-    grid.add("Load", "Load_7",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969592",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,0,50,0,0,0,7,9,10,12,14,15,13,11,10,0,0,7,6,5,5,6,7], index=grid.snapshots))
-
-    grid.add("Load", "Load_8",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969224",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([18,17,0,0,0,0,0,0,0,0,0,0,0,0,201,20,0,0,0,0,0,15,16,17], index=grid.snapshots))
-
-    grid.add("Load", "Load_9",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969634",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,0,0,0,0,0,0,0,0,0], index=grid.snapshots))
-
-    grid.add("Load", "Load_10",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_18",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([0,0,0,0,0,0,0,0,0,0,202,0,0,0,0,0,0,0,0,0,0,150,0,17], index=grid.snapshots))
-
-    grid.add("Load", "Load_11",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_14",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
-
-    grid.add("Load", "Load_12",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969253",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([18,17,16,15,14,15,16,17,19,20,22,24,25,23,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
-
-    grid.add("Load", "Load_13",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969616",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,6,5,4,5,6,7,9,10,12,14,15,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
-
-    grid.add("Load", "Load_14",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_71",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([18,17,16,15,14,15,16,17,19,20,22,24,25,23,21,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
-
-    grid.add("Load", "Load_15",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28969777",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC", 
-                p_set = pd.Series([8,7,6,5,4,5,6,7,9,0,12,14,105,13,11,10,9,8,7,6,5,5,6,7], index=grid.snapshots))
-
-    grid.add("Load", "Load_16",
-                bus="BranchTee_mvgd_36165_lvgd_1884820002_building_28968480",       # in MW (bei Zeitreihe: Liste oder Serie)
-                carrier="AC",
-                p_set = pd.Series([18,17,16,15,0,0,0,0,19,20,22,24,0,23,0,20,19,18,17,16,15,15,16,17], index=grid.snapshots))
-
-    grid.loads['carrier'] = 'AC'
+    #         print(f"Load {bus}_load wird hinzugefügt.")
+    #         grid.add("Load",
+    #                 name=bus + "_load",
+    #                 bus=bus,
+    #                 carrier="AC",
+    #                 p_set=power)
+    #         print(f"Load {bus}_load jetzt hinzugefügt.")
+    #     else:
+    #         print(f"Load für {bus} existiert bereits.")
+    
 
     print("Lasten hinzugefügt.")
 
-    solar_buses = buses.index[buses["p_nom_1"].notna()]
-    for bus in solar_buses:
-        print(f"Prüfe, ob Generator für {bus} existiert...")
-        existing = grid.generators[(grid.generators['bus'] == bus)]
-        if existing.empty:
+    # Setzen von p_set
+    grid.generators_t.p_set = pd.DataFrame(index=grid.snapshots)
+    """
+    Carrier und Type komplett egal?
+    """
 
-            grid.add("Generator",
-                    name=bus + "_solar",
-                    bus=bus,
-                    carrier="solar",
-                    type="solar")
-            print(f"Generator {bus}_solar hinzugefügt.")
+    """
+    Alle Solargeneratoren erstmal löschen? Weil von ding0 und dann alle einheitlich?
+    """
+    # #solar_buses = buses.index[buses["Power_solar"].notna()]
+    # solar_buses = buses.index[buses["Power_solar"] != 0]
+    
+    # for bus in solar_buses:
+    #     print(f"Prüfe, ob Generator für {bus} existiert...")
+    #     existing = grid.generators[(grid.generators['bus'] == bus)]
 
-        else:
-            print(f"Generator für {bus} existiert bereits.")
+    #     """
+    #     Power für Solar ist immer 0, warum?
+    #     Im Test gab es schöne Kurven
+    #     """
+    #     power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], index=snapshots, env=environment)
+    #     if existing.empty:
+    #         # Generator hinzufügen
+            
+    #         grid.add("Generator",
+    #                 name=bus + "_solar",
+    #                 bus=bus,
+    #                 carrier="solar",
+    #                 type="solar",
+    #                 p_nom=buses.loc[bus, 'Power_solar'])
+            
+
+    #         grid.generators_t.p_max_pu[bus + "_solar"] = power.values
+
+    #         print(f"Generator {bus}_solar hinzugefügt.")
+
+    #     else:
+    #         # Load zu existierendem Generator hinzufügen
+    #         grid.generators_t.p_max_pu[bus + "_solar"] = power.values
+
+    #         print(f"Generator für {bus} existiert bereits.")
 
 
 
+    print("Solargeneratoren hinzugefügt.")
 
-
-    # Wetter sollte schon hinzugefügt sein, hier nur Beispielwerte
-    # In Prozent als Anteil der möglichen maximal Leistung
-    solar_profile = pd.Series([0.9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.8, 0, 0, 0, 0, 0, 0, 0, 0], index=grid.snapshots)
-
-    solar_buses = buses.index[buses["p_nom_1"].notna() & (buses['type_1'] == 'solar')]
-    solar_gens = grid.generators.index[grid.generators['bus'].isin(solar_buses)]
-
-    p_nom_vals = grid.generators.loc[solar_gens, 'bus'].map(buses['p_nom_1'])
-
-    # 4. Für jeden Generator ein skaliertes Profil erzeugen
-    scaled_profiles = pd.DataFrame(np.outer(solar_profile.values, p_nom_vals), index=grid.snapshots, columns=solar_gens)
-
-    # 5. Zuweisung des skalierten Profils an p_max_pu
-    grid.generators_t.p_max_pu[solar_gens] = scaled_profiles
-
+    #HP_amb_buses = buses.index[buses["Power_HP_ambient"].notna()]
+    HP_amb_buses = buses.index[buses["Power_HP_ambient"] != 0]
+    for bus in HP_amb_buses:
+        # Generator hinzufügen
+        power = demand_load.create_hp(index=snapshots, env=environment)
+        print(len(power), "Power:", power)
         
+        grid.add("Generator",
+                name=bus + "_HP_ambient",
+                bus=bus,
+                carrier="HP_ambient", # carrier definieren, damit es nicht mit anderen HPs kollidiert
+                type="HP_ambient") # eventuell nicht so wichtig
+        grid.generators_t.p_max_pu[bus + "_HP_ambient"] = power.values
+
+        print(f"Generator {bus}_HP_ambient hinzugefügt.")
+
+
+
+    # """
+    # HP Geothermal und Ambient sind gleich, nur Carrier unterschiedlich
+    # """
+    # #HP_geo_buses = buses.index[buses["Power_HP_geothermal"].notna()]
+    # HP_geo_buses = buses.index[buses["Power_HP_geothermal"] != 0]
+    # for bus in HP_geo_buses:
+    #     # Generator hinzufügen
+    #     power = demand_load.create_hp(index=snapshots, env=environment)
+    #     grid.add("Generator",
+    #             name=bus + "_HP_geothermal",
+    #             bus=bus,
+    #             carrier="HP_geothermal",
+    #             type="HP_geothermal")
+    #     grid.generators_t.p_max_pu[bus + "_HP_geothermal"] = power.values
+
     return grid
 
 def pypsa_vorbereiten(grid):
