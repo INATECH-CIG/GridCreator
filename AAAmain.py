@@ -155,54 +155,66 @@ grid_1 = mf.pypsa_vorbereiten(grid_1)
 
 
 #%% .optimize()
+
+
+# Fix Capacity
+grid_1.optimize.fix_optimal_capacities()
+
+# Set snapshots für Optimierung
+start_time = pd.Timestamp("2023-01-01 00:00:00")
+end_time = pd.Timestamp("2023-01-07 23:00:00")
+snapshots = pd.date_range(start=start_time, end=end_time, freq='h')
+grid_1.set_snapshots(snapshots)
+
+#%%
 grid_1.optimize()
 
 
 #%% Ergebnisse plotten
 
-# Color Map für Powerflow
-cmap = plt.colormaps.get_cmap('coolwarm')  # Neue API für Colormap
+# # Color Map für Powerflow
+# cmap = plt.colormaps.get_cmap('coolwarm')  # Neue API für Colormap
 
-# Zeitschritte einzelnd plotten
-for i, snapshot in enumerate(grid_1.snapshots):
-    pf = grid_1.lines_t.p0.loc[snapshot]
+# # Zeitschritte einzelnd plotten
+# for i, snapshot in enumerate(grid_1.snapshots):
+#     pf = grid_1.lines_t.p0.loc[snapshot]
 
-    # Normalisieren
-    norm = colors.Normalize(vmin=pf.min(), vmax=pf.max())
-    line_colors = [cmap(norm(val)) for val in pf]
+#     # Normalisieren
+#     norm = colors.Normalize(vmin=pf.min(), vmax=pf.max())
+#     line_colors = [cmap(norm(val)) for val in pf]
 
-    # Plot erstellen
-    fig, ax = plt.subplots(figsize=(6, 6))
-    plot_dict = grid_1.plot.map(line_colors=line_colors, bus_sizes=1e-9, line_widths=2)
-    plt.title(f"Power Flow - Stunde {i}")
+#     # Plot erstellen
+#     fig, ax = plt.subplots(figsize=(6, 6))
+#     plot_dict = grid_1.plot.map(line_colors=line_colors, bus_sizes=1e-9, line_widths=2)
+#     plt.title(f"Power Flow - Stunde {i}")
 
-    # Farbskala hinzufügen
-    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])  # notwendig für colorbar
-    fig.colorbar(sm, ax=ax, label="Power Flow [MW]")
+#     # Farbskala hinzufügen
+#     sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+#     sm.set_array([])  # notwendig für colorbar
+#     fig.colorbar(sm, ax=ax, label="Power Flow [MW]")
 
-    plt.show()
+#     plt.show()
 
 
 
-# Ale Transformator-Generatoren plotten
+# # Ale Transformator-Generatoren plotten
 
-fig, ax = plt.subplots()
-ax.set_xlabel("Stunde")
-ax.set_ylabel("Leistung [MW]")
+# fig, ax = plt.subplots()
+# ax.set_xlabel("Stunde")
+# ax.set_ylabel("Leistung [MW]")
 
-# Nur Generatoren mit carrier "gas"
-gas_generators = grid_1.generators[grid_1.generators.carrier == "gas"]
+# # Nur Generatoren mit carrier "gas"
+# gas_generators = grid_1.generators[grid_1.generators.carrier == "gas"]
 
-# Für jeden dieser Generatoren die Zeitreihe plotten
-for name in gas_generators.index:
-    ax.plot(grid_1.generators_t.p.index, grid_1.generators_t.p[name], label=name)
+# # Für jeden dieser Generatoren die Zeitreihe plotten
+# for name in gas_generators.index:
+#     ax.plot(grid_1.generators_t.p.index, grid_1.generators_t.p[name], label=name)
 
-ax.axhline(0, color="gray", linewidth=0.5)
-ax.legend(fontsize="small", loc="upper right", bbox_to_anchor=(1.3, 1.0))
-plt.title("Generatorleistungen (nur an Transformatoren)")
-plt.tight_layout()
-plt.show()
+# ax.axhline(0, color="gray", linewidth=0.5)
+# ax.legend(fontsize="small", loc="upper right", bbox_to_anchor=(1.3, 1.0))
+# plt.title("Generatorleistungen (nur an Transformatoren)")
+# plt.tight_layout()
+# plt.show()
 
 
 # %%
