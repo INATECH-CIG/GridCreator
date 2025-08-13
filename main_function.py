@@ -211,26 +211,9 @@ def technik_fill(buses, Technik, p_total):
 
 
 
-def loads_zuordnen(grid, buses, env=None):
+def loads_zuordnen(grid, buses, bbox, env=None):
     if env is None:
-        timer = Timer(
-            time_discretization=3600,         # 1 Stunde in Sekunden
-            timesteps_horizon=8760,
-            timesteps_used_horizon=8760,
-            timesteps_total=24*365)  # Stunden * Tage im Jahr 
-        """
-        as Python-Paket richardsonpy der RWTH Aachen generiert standardmäßig stochastische
-        Lastprofile für ein Jahr. Diese Profile basieren auf typischen Nutzungsdaten und
-        werden in stündlicher Auflösung erstellt. Die erzeugten Daten umfassen somit
-        8.760 Stunden pro Jahr.
-        """            
-        
-        """
-        Wetter könnte wie bei Haus gemacht werden, aber eig unnötig, weil davor env ertsellt wurde
-        """
-        weather = Weather(timer)
-        prices = Prices()
-        environment = Environment(timer, weather, prices)
+        environment = func.env_wetter(bbox)
     else:
         environment = env
         
@@ -243,7 +226,7 @@ def loads_zuordnen(grid, buses, env=None):
     Angepasst an env ?????
     """
     start_time = pd.Timestamp("2023-01-01 00:00:00")
-    snapshots = pd.date_range(start=start_time, periods=timer.timesteps_total, freq=f"{int(timer.time_discretization/60)}min")
+    snapshots = pd.date_range(start=start_time, periods=environment.timer.timesteps_total, freq=f"{int(environment.timer.time_discretization/60)}min")
 
     grid.set_snapshots(snapshots)
 

@@ -145,7 +145,7 @@ Zeitreihen sind spezifischen buses zugeordnet!
 Funktioniert also auch nur für ausgewählte Koordinaten!
 '''
 
-grid_1 = mf.loads_zuordnen(grid_1, buses_df)
+grid_1 = mf.loads_zuordnen(grid_1, buses_df, bbox_1)
 
 
 #%% STEP 5

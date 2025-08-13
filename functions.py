@@ -12,6 +12,16 @@ from functools import reduce
 import numpy as np
 from data import agg_dict
 
+import cdsapi
+from scipy import datasets
+import xarray as xr
+import os
+
+from pycity_base.classes.timer import Timer
+from pycity_base.classes.weather import Weather
+from pycity_base.classes.prices import Prices
+from pycity_base.classes.environment import Environment
+
 #%% Funktionen zum aufrufen
 
 
@@ -503,3 +513,179 @@ def storage(buses):
 
 
     return buses
+
+
+
+
+def relative_humidity(t, td):
+    # t und td in °C
+    es = 6.112 * np.exp((17.67 * t) / (t + 243.5))  # Sättigungsdampfdruck
+    e = 6.112 * np.exp((17.67 * td) / (td + 243.5)) # Dampfdruck
+    rh = 100 * e / es
+    return rh
+
+
+def env_wetter(bbox, time_discretization=3600, timesteps_horizon=8760, timesteps_used_horizon=8760, timesteps_total=8760): #, year):
+
+    # Definierung der gebrauchten Tabellen
+    variables = [
+        ("10m_u_component_of_wind", "u10"),
+        ("10m_v_component_of_wind", "v10"),
+        ("2m_dewpoint_temperature", "d2m"),
+        ("2m_temperature", "t2m"),
+        ("surface_pressure", "sp"),
+        ("surface_solar_radiation_downwards", "ssrd"),
+        ("total_sky_direct_solar_radiation_at_surface", "fdir"),
+        ("total_cloud_cover", "tcc")
+    ]
+
+    # # cdsapi Client initialisieren
+    # client = cdsapi.Client()
+    # # Daten für jede Variable anfordern
+    # for var, cod in variables:
+    #     dataset = "reanalysis-era5-single-levels"
+    #     request = {
+    #         "product_type": "reanalysis",
+    #         "variable": var,
+    #         "year": str(year),
+    #         "month": [
+    #             "01", "02", "03",
+    #             "04", "05", "06",
+    #             "07", "08", "09",
+    #             "10", "11", "12"
+    #         ],
+    #         "day": [
+    #             "01", "02", "03",
+    #             "04", "05", "06",
+    #             "07", "08", "09",
+    #             "10", "11", "12",
+    #             "13", "14", "15",
+    #             "16", "17", "18",
+    #             "19", "20", "21",
+    #             "22", "23", "24",
+    #             "25", "26", "27",
+    #             "28", "29", "30",
+    #             "31"
+    #         ],
+    #         "time": [
+    #             "00:00", "01:00", "02:00",
+    #             "03:00", "04:00", "05:00",
+    #             "06:00", "07:00", "08:00",
+    #             "09:00", "10:00", "11:00",
+    #             "12:00", "13:00", "14:00",
+    #             "15:00", "16:00", "17:00",
+    #             "18:00", "19:00", "20:00",
+    #             "21:00", "22:00", "23:00"
+    #         ],
+    #         "format": "netcdf",
+    #         "area": bbox
+    #     }
+
+    #     # Anfrage an den CDS stellen und Daten speichern
+    #     client.retrieve(dataset, request, var+'.nc')
+
+    # Daten in xarray Datasets laden
+    # und in einem Dictionary speichern
+    datasets = {}
+    for var, cod in variables:
+        filename = 'GER_' +var + '.nc'
+        ds = xr.open_dataset(os.path.join('weather_2013', filename))
+        datasets[var] = ds
+        print(f"Variable {var} verarbeitet.")
+
+    
+
+    # # Daten löschen
+    # for var, cod in variables:
+    #     os.remove(var + '.nc')
+    
+    
+    # Mittelpunkt von bbox
+    # Berechnet den Mittelpunkt der Bounding Box.
+    # bbox: [N, W, S, E] (Nord, West, Süd, Ost)
+    lat_target = (bbox[0] + bbox[2]) / 2
+    lon_target = (bbox[1] + bbox[3]) / 2
+
+    data_dict = {}
+
+    for var, cod in variables:
+        data = datasets[var].sel(latitude=lat_target, longitude=lon_target, method='nearest')
+        df = data.to_dataframe()
+        data_dict[var] = df[cod]
+
+
+    # Umrechnung der Einheiten
+    # Temperatur von Kelvin zu Celsius umwandeln
+    data_dict["2m_temperature"] = data_dict["2m_temperature"] - 273.15
+    data_dict["2m_dewpoint_temperature"] = data_dict["2m_dewpoint_temperature"] - 273.15
+
+    # Luftdruck von Pa zu hPa umwandeln
+    data_dict["surface_pressure"] = data_dict["surface_pressure"] / 100  # Umwandlung von Pa zu hPa
+
+    # Rel. Humidity  berechnen
+    data_dict["2m_relative_humidity"] = relative_humidity(data_dict["2m_temperature"], data_dict["2m_dewpoint_temperature"])
+
+    # Windgeschwindigkeit berechnen
+    data_dict["10m_wind_speed"] = (data_dict["10m_u_component_of_wind"]**2 + data_dict["10m_v_component_of_wind"]**2)**0.5
+
+    # Strahlungswerte berechnen: Umwandlung von J/m² zu W/m²
+    data_dict["surface_solar_radiation_downwards"] = data_dict["surface_solar_radiation_downwards"] / 3600
+    data_dict["total_sky_direct_solar_radiation_at_surface"] = data_dict["total_sky_direct_solar_radiation_at_surface"] / 3600
+
+    # Diffuse Strahlung berechnen
+    data_dict["surface_diffuse_solar_radiation_at_surface"] = data_dict["surface_solar_radiation_downwards"] - data_dict["total_sky_direct_solar_radiation_at_surface"]
+
+    # Bedeckungsgrad berechnen
+    data_dict["total_cloud_cover"] = (data_dict["total_cloud_cover"] * 8).round().clip(lower=0, upper=8)
+
+    # Neue Variablen definieren
+    variables_neu = [
+        "10m_wind_speed",
+        "2m_relative_humidity",
+        "2m_temperature",
+        "surface_pressure",
+        "surface_diffuse_solar_radiation_at_surface",
+        "total_sky_direct_solar_radiation_at_surface",
+        "total_cloud_cover"
+    ]
+
+    # Speichern der Daten in CSV-Dateien
+    for var in variables_neu:
+        filename = f"{var}_nearest.txt"
+        data_dict[var].to_csv(filename, sep="\t", index=False, header=False)
+
+
+    # Erstellen der Environment
+    timer = Timer(
+        time_discretization=time_discretization,
+        timesteps_horizon=timesteps_horizon,
+        timesteps_used_horizon=timesteps_used_horizon,
+        timesteps_total=timesteps_total
+    )
+
+
+    weather = Weather(timer,
+                    path_TRY=None, path_TMY3=None,
+                    path_temperature="2m_temperature_nearest.txt",
+                    path_direct_radiation="total_sky_direct_solar_radiation_at_surface_nearest.txt",
+                    path_diffuse_radiation="surface_diffuse_solar_radiation_at_surface_nearest.txt",
+                    path_wind_speed="10m_wind_speed_nearest.txt",
+                    path_humidity="2m_relative_humidity_nearest.txt",
+                    path_pressure="surface_pressure_nearest.txt",
+                    path_cloudiness="total_cloud_cover_nearest.txt",
+                    time_discretization=3600,
+                    delimiter="\t",
+                    use_TRY=None, use_TMY3=False,
+                    location=(50.76, 6.07), height_velocity_measurement=10,
+                    altitude=152.0, time_zone=1)
+    prices = Prices()
+    environment = Environment(timer, weather, prices)
+
+    for var in variables_neu:
+        filename = f"{var}_nearest.txt"
+        os.remove(filename)
+        print(f"{filename} wurde gelöscht.")
+
+    return environment
+
+# %%
