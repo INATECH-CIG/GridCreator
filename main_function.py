@@ -105,7 +105,7 @@ def osm_data(net, buses_df, bbox_neu, buffer):
     return buses_df, Area, Area_features
 
 
-def daten_zuordnung(buses, bundesland_data, zensus_data):
+def daten_zuordnung(buses, bundesland_data, ordner):
     """
     Weist den Bussen im Netzwerk Bundesland- und Zensusdaten zu.
     
@@ -122,7 +122,9 @@ def daten_zuordnung(buses, bundesland_data, zensus_data):
     buses = func.bundesland(buses, bundesland_data)
 
     # Zensus Daten
-    buses = func.daten_zuordnen(buses, zensus_data)
+    buses = func.zensus_ID(buses, ordner)
+
+    buses = func.zensus_laden(buses, ordner)
 
     return buses
 

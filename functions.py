@@ -3,6 +3,7 @@
 import geopandas as gpd
 from pyproj import Transformer
 import pandas as pd
+import polars as pl
 import osmnx as ox
 import scipy.spatial as spatial
 import numpy as np
@@ -132,6 +133,107 @@ def bundesland(net_buses, data):
 
     return net_buses
 
+
+def zensus_ID(buses_df, ordner):
+
+    zensus = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
+
+    buses = buses_df
+
+    x_array, y_array = epsg4326_zu_epsg3035(buses["x"], buses["y"])
+
+    # Referenzpunkte in der Zensus-Tabelle
+    reference_points = np.vstack((zensus['x_mp_100m'], zensus['y_mp_100m'])).T
+    tree = spatial.cKDTree(reference_points)
+
+    # Zielpunkte aus dem Netz
+    query_points = np.vstack((x_array, y_array)).T
+
+    # Nächste Nachbarn finden
+    distances, indices = tree.query(query_points)
+
+
+
+    columns = np.array(zensus["GITTER_ID_100m"])[indices]
+
+    buses['GITTER_ID_100m'] = columns
+
+    return buses
+
+
+def zensus_laden(buses_df, ordner):
+    """
+    Lädt Zensusdaten aus CSV-Dateien in einem angegebenen Ordner und gibt sie als DataFrame zurück.
+    
+    Args:
+        ordner (str): Der Pfad zum Ordner, der die Zensusdaten im CSV-Format enthält.
+        
+    Returns:
+        pd.DataFrame: Ein DataFrame, das die kombinierten Zensusdaten enthält.
+    """
+
+    columns = buses_df['GITTER_ID_100m']
+
+
+    # Manuell laden
+    Zensus2022_Bevoelkerungszahl_100m = (pl.scan_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", separator=";")
+                                         .filter(pl.col("GITTER_ID_100m")
+                                                 .is_in(columns)).select("GITTER_ID_100m",
+                                                                         "Einwohner").collect()
+    )
+
+    Zensus2022_Durchschn_Nettokaltmiete_100m = (pl.scan_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_100m-Gitter.csv", separator=";")
+                                                .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                .select("GITTER_ID_100m",
+                                                        "durchschnMieteQM",
+                                                        ).collect()
+    )
+
+    Zensus2022_Eigentuemerquote_100m = (pl.scan_csv(ordner + "/Zensus2022_Eigentuemerquote_100m-Gitter.csv", separator=";")
+                                        .filter(pl.col("GITTER_ID_100m")
+                                        .is_in(columns)).select("GITTER_ID_100m",
+                                                                "Eigentuemerquote").collect()
+                                        )
+
+    Zensus2022_Heizungsart_100m = (pl.scan_csv(ordner + "/Zensus2022_Heizungsart_100m-Gitter_utf8.csv", separator=";")
+                                   .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                   .select("GITTER_ID_100m",
+                                           "Insgesamt_Heizungsart",
+                                           "Fernheizung",
+                                           "Etagenheizung",
+                                           "Blockheizung",
+                                           "Zentralheizung",
+                                           "Einzel_Mehrraumoefen",
+                                           "keine_Heizung").collect()
+    )
+
+
+
+    Zensus2022_Bevoelkerungszahl_100m = Zensus2022_Bevoelkerungszahl_100m.to_pandas()
+    Zensus2022_Durchschn_Nettokaltmiete_100m = Zensus2022_Durchschn_Nettokaltmiete_100m.to_pandas()
+    Zensus2022_Eigentuemerquote_100m = Zensus2022_Eigentuemerquote_100m.to_pandas()
+    Zensus2022_Heizungsart_100m = Zensus2022_Heizungsart_100m.to_pandas()
+
+
+    buses_df = buses_df.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
+    buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_100m, on="GITTER_ID_100m", how="left")
+    buses_df = buses_df.merge(Zensus2022_Eigentuemerquote_100m, on="GITTER_ID_100m", how="left")
+    buses_df = buses_df.merge(Zensus2022_Heizungsart_100m, on="GITTER_ID_100m", how="left")
+
+
+    buses_df.rename(columns={"Einwohner": "Zensus_Einwohner",
+                             "durchschnMieteQM": "Zensus_durchschnMieteQM",
+                             "Eigentuemerquote": "Zensus_Eigentuemerquote",
+                             "Insgesamt_Heizungsart": "Zensus_Insgesamt_Heizungsart",
+                             "Fernheizung": "Zensus_Fernheizung",
+                             "Etagenheizung": "Zensus_Etagenheizung",
+                             "Blockheizung": "Zensus_Blockheizung",
+                             "Zentralheizung": "Zensus_Zentralheizung",
+                             "Einzel_Mehrraumoefen": "Zensus_Einzel_Mehrraumoefen",
+                             "keine_Heizung": "Zensus_keine_Heizung"}, inplace=True)
+
+
+    return buses_df
 
 
 def epsg4326_zu_epsg3035(lon, lat):

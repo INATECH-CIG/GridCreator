@@ -70,7 +70,7 @@ Ordner zensus_daten enthält nur kleinen Tewil aller Zensus-Tabellen, um die Lad
 Alle Tabellen sind im Ordner zensus_daten_all enthalten.
 """
 ordner = "zensus_daten"
-zensus = mf.daten_laden(ordner)
+#zensus = mf.daten_laden(ordner)
 
 """
 Daten gespeichert, um sie ab jetzt nur noch direkt in einem DataFrame zu laden, spart Zeit!
@@ -78,7 +78,7 @@ Daten gespeichert, um sie ab jetzt nur noch direkt in einem DataFrame zu laden, 
 # zensus.to_pickle('Zensus_daten_als_DataFrame.pkl')
 # zensus = pd.read_pickle('Zensus_daten_als_DataFrame.pkl')
 
-buses_df = mf.daten_zuordnung(buses_df, gpd_bundesland, zensus)
+buses_df = mf.daten_zuordnung(buses_df, gpd_bundesland, ordner)
 
 
 fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
@@ -119,6 +119,10 @@ plt.show()
 #%% STEP 3
 
 # Technik Zuordnen
+
+"""
+Zensusdaten fehlen und müssen nocheinmal für Bundesländer addiert werden!
+"""
 
 # Zensusdaten für Bundesland
 Bev_data_Zensus = mf.bundesland_zensus(zensus, datei = "DE_VG5000.gpkg")
