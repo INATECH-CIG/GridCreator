@@ -124,13 +124,19 @@ def daten_zuordnung(buses, bundesland_data, ordner):
     # Zensus Daten
     buses = func.zensus_ID(buses, ordner)
 
+    # Alten Index sichern
+    buses = buses.reset_index() 
+
     buses = func.zensus_laden(buses, ordner)
+
+    # Alten Index wiederherstellen
+    buses.set_index("Bus", inplace=True)
 
     return buses
 
 
 
-def bundesland_zensus(zensus, datei):
+def bundesland_zensus(ordner, datei, bundesland):
     """
     Lädt die Bundesland-Daten aus einer GeoJSON-Datei und ordnet sie den Zensusdaten zu.
     
@@ -142,9 +148,16 @@ def bundesland_zensus(zensus, datei):
         pd.DataFrame: DataFrame mit den zugeordneten Bundesland-Daten.
     """
 
-    lan = func.load_shapes(datei)
+    lan = func.load_shapes(datei, bundesland)
 
-    df = func.bundesland_zuordnung(zensus, lan)
+    buses = pd.DataFrame()
+    buses["GITTER_ID_100m"] = func.bundesland_zuordnung(ordner, lan)
+
+    df = func.zensus_laden(buses, ordner)
+
+    df = func.bundesland_summieren(df, bundesland)
+
+    df = df.T.reset_index().rename(columns={"index": "GEN"}) 
 
     return df
 
@@ -219,9 +232,6 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     else:
         environment = env
         
-    
-    # Powerflow zu bestehendem Netz
-    grid.pf()
 
     # Zeit sollte auch schon integriert sein, wenn Lasten schon im Netz sind
     """
