@@ -221,16 +221,18 @@ def zensus_laden(buses_df, ordner):
     buses_df = buses_df.merge(Zensus2022_Heizungsart_100m, on="GITTER_ID_100m", how="left")
 
 
-    buses_df.rename(columns={"Einwohner": "Zensus_Einwohner",
-                             "durchschnMieteQM": "Zensus_durchschnMieteQM",
-                             "Eigentuemerquote": "Zensus_Eigentuemerquote",
-                             "Insgesamt_Heizungsart": "Zensus_Insgesamt_Heizungsart",
-                             "Fernheizung": "Zensus_Fernheizung",
-                             "Etagenheizung": "Zensus_Etagenheizung",
-                             "Blockheizung": "Zensus_Blockheizung",
-                             "Zentralheizung": "Zensus_Zentralheizung",
-                             "Einzel_Mehrraumoefen": "Zensus_Einzel_Mehrraumoefen",
-                             "keine_Heizung": "Zensus_keine_Heizung"}, inplace=True)
+    buses_df.rename(columns={col: f"Zensus_{col}" for col in buses_df.columns[2:]}, inplace=True)
+
+    # buses_df.rename(columns={"Einwohner": "Zensus_Einwohner",
+    #                          "durchschnMieteQM": "Zensus_durchschnMieteQM",
+    #                          "Eigentuemerquote": "Zensus_Eigentuemerquote",
+    #                          "Insgesamt_Heizungsart": "Zensus_Insgesamt_Heizungsart",
+    #                          "Fernheizung": "Zensus_Fernheizung",
+    #                          "Etagenheizung": "Zensus_Etagenheizung",
+    #                          "Blockheizung": "Zensus_Blockheizung",
+    #                          "Zentralheizung": "Zensus_Zentralheizung",
+    #                          "Einzel_Mehrraumoefen": "Zensus_Einzel_Mehrraumoefen",
+    #                          "keine_Heizung": "Zensus_keine_Heizung"}, inplace=True)
 
 
     return buses_df

@@ -98,14 +98,16 @@ def create_hp(index, hp_params=None, flow_temp=None, schedule= None, env=None):
                 flow_temp = a * (t_inside - t_ambient_series) + b  # einfache Heizkurve
     """
     # Dummy-Vorlauftemperatur über Zeitschritte (z. B. 35 °C ± Zufall)
-    flow_temp = np.full(len(index), 45)
+    if flow_temp is None:
+        flow_temp = np.full(len(index), 45)
 
     # Nominalwerte berechnen
     nominals= heatpump.getNominalValues(flow_temp)
 
 
     # Einfaches Betriebsprofil (z. B. Zufall ein/aus)
-    schedule = np.random.randint(0, 2, size=len(index))
+    if schedule is None:
+        schedule = np.random.randint(0, 2, size=len(index))
     """
     Wie entscheide ich wann HP läuft?
 
