@@ -249,31 +249,31 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     """
     Alle Loads erstmal löschen? Weil von ding0 und dann alle einheitlich?
     """
-    # for bus in buses.index:
-    #     print(f"Prüfe, ob Load für {bus} existiert...")
-    #     existing = grid.loads[(grid.loads['bus'] == bus)]
-    #     if existing.empty:
-    #         # Lasten hinzufügen
-    #         """
-    #         Max. allowed number of occupants per apartment is 5
-    #         """
-    #         # power = demand_load.create_haus(people=buses.loc[bus, 'Zensus_Einwohner_sum'], env=environment)
-    #         power, occupants = demand_load.create_haus(people=3, index=snapshots, env=environment)
-    #         # Hier wird angenommen, dass p_set eine Serie ist, die die Lasten für jede Stunde enthält
-    #         # power = pd.Series(power[:len(grid.snapshots)], index=grid.snapshots)
-    #         print("Snapshots grid:", grid.snapshots)
-    #         print("Index power:", power.index)
-    #         print("Sind sie gleich? ", power.index.equals(grid.snapshots))
+    for bus in buses.index:
+        print(f"Prüfe, ob Load für {bus} existiert...")
+        existing = grid.loads[(grid.loads['bus'] == bus)]
+        if existing.empty:
+            # Lasten hinzufügen
+            """
+            Max. allowed number of occupants per apartment is 5
+            """
+            # power = demand_load.create_haus(people=buses.loc[bus, 'Zensus_Einwohner_sum'], env=environment)
+            power, occupants = demand_load.create_haus(people=3, index=snapshots, env=environment)
+            # Hier wird angenommen, dass p_set eine Serie ist, die die Lasten für jede Stunde enthält
+            # power = pd.Series(power[:len(grid.snapshots)], index=grid.snapshots)
+            print("Snapshots grid:", grid.snapshots)
+            print("Index power:", power.index)
+            print("Sind sie gleich? ", power.index.equals(grid.snapshots))
 
-    #         print(f"Load {bus}_load wird hinzugefügt.")
-    #         grid.add("Load",
-    #                 name=bus + "_load",
-    #                 bus=bus,
-    #                 carrier="AC",
-    #                 p_set=power)
-    #         print(f"Load {bus}_load jetzt hinzugefügt.")
-    #     else:
-    #         print(f"Load für {bus} existiert bereits.")
+            print(f"Load {bus}_load wird hinzugefügt.")
+            grid.add("Load",
+                    name=bus + "_load",
+                    bus=bus,
+                    carrier="AC",
+                    p_set=power)
+            print(f"Load {bus}_load jetzt hinzugefügt.")
+        else:
+            print(f"Load für {bus} existiert bereits.")
     
 
     print("Lasten hinzugefügt.")
@@ -287,38 +287,38 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     """
     Alle Solargeneratoren erstmal löschen? Weil von ding0 und dann alle einheitlich?
     """
-    # #solar_buses = buses.index[buses["Power_solar"].notna()]
-    # solar_buses = buses.index[buses["Power_solar"] != 0]
+    #solar_buses = buses.index[buses["Power_solar"].notna()]
+    solar_buses = buses.index[buses["Power_solar"] != 0]
     
-    # for bus in solar_buses:
-    #     print(f"Prüfe, ob Generator für {bus} existiert...")
-    #     existing = grid.generators[(grid.generators['bus'] == bus)]
+    for bus in solar_buses:
+        print(f"Prüfe, ob Generator für {bus} existiert...")
+        existing = grid.generators[(grid.generators['bus'] == bus)]
 
-    #     """
-    #     Power für Solar ist immer 0, warum?
-    #     Im Test gab es schöne Kurven
-    #     """
-    #     power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], index=snapshots, env=environment)
-    #     if existing.empty:
-    #         # Generator hinzufügen
+        """
+        Power für Solar ist immer 0, warum?
+        Im Test gab es schöne Kurven
+        """
+        power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], index=snapshots, env=environment)
+        if existing.empty:
+            # Generator hinzufügen
             
-    #         grid.add("Generator",
-    #                 name=bus + "_solar",
-    #                 bus=bus,
-    #                 carrier="solar",
-    #                 type="solar",
-    #                 p_nom=buses.loc[bus, 'Power_solar'])
+            grid.add("Generator",
+                    name=bus + "_solar",
+                    bus=bus,
+                    carrier="solar",
+                    type="solar",
+                    p_nom=buses.loc[bus, 'Power_solar'])
             
 
-    #         grid.generators_t.p_max_pu[bus + "_solar"] = power.values
+            grid.generators_t.p_max_pu[bus + "_solar"] = power.values
 
-    #         print(f"Generator {bus}_solar hinzugefügt.")
+            print(f"Generator {bus}_solar hinzugefügt.")
 
-    #     else:
-    #         # Load zu existierendem Generator hinzufügen
-    #         grid.generators_t.p_max_pu[bus + "_solar"] = power.values
+        else:
+            # Load zu existierendem Generator hinzufügen
+            grid.generators_t.p_max_pu[bus + "_solar"] = power.values
 
-    #         print(f"Generator für {bus} existiert bereits.")
+            print(f"Generator für {bus} existiert bereits.")
 
 
 
@@ -342,20 +342,20 @@ def loads_zuordnen(grid, buses, bbox, env=None):
 
 
 
-    # """
-    # HP Geothermal und Ambient sind gleich, nur Carrier unterschiedlich
-    # """
-    # #HP_geo_buses = buses.index[buses["Power_HP_geothermal"].notna()]
-    # HP_geo_buses = buses.index[buses["Power_HP_geothermal"] != 0]
-    # for bus in HP_geo_buses:
-    #     # Generator hinzufügen
-    #     power = demand_load.create_hp(index=snapshots, env=environment)
-    #     grid.add("Generator",
-    #             name=bus + "_HP_geothermal",
-    #             bus=bus,
-    #             carrier="HP_geothermal",
-    #             type="HP_geothermal")
-    #     grid.generators_t.p_max_pu[bus + "_HP_geothermal"] = power.values
+    """
+    HP Geothermal und Ambient sind gleich, nur Carrier unterschiedlich
+    """
+    #HP_geo_buses = buses.index[buses["Power_HP_geothermal"].notna()]
+    HP_geo_buses = buses.index[buses["Power_HP_geothermal"] != 0]
+    for bus in HP_geo_buses:
+        # Generator hinzufügen
+        power = demand_load.create_hp(index=snapshots, env=environment)
+        grid.add("Generator",
+                name=bus + "_HP_geothermal",
+                bus=bus,
+                carrier="HP_geothermal",
+                type="HP_geothermal")
+        grid.generators_t.p_max_pu[bus + "_HP_geothermal"] = power.values
 
     return grid
 

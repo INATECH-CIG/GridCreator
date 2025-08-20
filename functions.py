@@ -176,52 +176,102 @@ def zensus_laden(buses_df, ordner):
 
 
     # Manuell laden
+
     Zensus2022_Bevoelkerungszahl_100m = (pl.scan_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", separator=";")
                                          .filter(pl.col("GITTER_ID_100m")
                                                  .is_in(columns)).select("GITTER_ID_100m",
                                                                          "Einwohner").collect()
-    )
+                                        )
+    Zensus2022_Bevoelkerungszahl_100m = Zensus2022_Bevoelkerungszahl_100m.to_pandas()
+    Zensus2022_Bevoelkerungszahl_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Bevoelkerungszahl_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
+
 
     Zensus2022_Durchschn_Nettokaltmiete_100m = (pl.scan_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_100m-Gitter.csv", separator=";")
                                                 .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                 .select("GITTER_ID_100m",
                                                         "durchschnMieteQM",
                                                         ).collect()
-    )
+                                                )
+    Zensus2022_Durchschn_Nettokaltmiete_100m = Zensus2022_Durchschn_Nettokaltmiete_100m.to_pandas()
+    Zensus2022_Durchschn_Nettokaltmiete_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Durchschn_Nettokaltmiete_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_100m, on="GITTER_ID_100m", how="left")
+
 
     Zensus2022_Eigentuemerquote_100m = (pl.scan_csv(ordner + "/Zensus2022_Eigentuemerquote_100m-Gitter.csv", separator=";")
                                         .filter(pl.col("GITTER_ID_100m")
                                         .is_in(columns)).select("GITTER_ID_100m",
                                                                 "Eigentuemerquote").collect()
                                         )
+    Zensus2022_Eigentuemerquote_100m = Zensus2022_Eigentuemerquote_100m.to_pandas()
+    Zensus2022_Eigentuemerquote_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Eigentuemerquote_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Eigentuemerquote_100m, on="GITTER_ID_100m", how="left")
+
 
     Zensus2022_Heizungsart_100m = (pl.scan_csv(ordner + "/Zensus2022_Heizungsart_100m-Gitter_utf8.csv", separator=";")
                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                    .select("GITTER_ID_100m",
-                                           "Insgesamt_Heizungsart",
                                            "Fernheizung",
                                            "Etagenheizung",
                                            "Blockheizung",
                                            "Zentralheizung",
                                            "Einzel_Mehrraumoefen",
                                            "keine_Heizung").collect()
-    )
-
-
-
-    Zensus2022_Bevoelkerungszahl_100m = Zensus2022_Bevoelkerungszahl_100m.to_pandas()
-    Zensus2022_Durchschn_Nettokaltmiete_100m = Zensus2022_Durchschn_Nettokaltmiete_100m.to_pandas()
-    Zensus2022_Eigentuemerquote_100m = Zensus2022_Eigentuemerquote_100m.to_pandas()
+                                    )
     Zensus2022_Heizungsart_100m = Zensus2022_Heizungsart_100m.to_pandas()
-
-
-    buses_df = buses_df.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
-    buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_100m, on="GITTER_ID_100m", how="left")
-    buses_df = buses_df.merge(Zensus2022_Eigentuemerquote_100m, on="GITTER_ID_100m", how="left")
+    Zensus2022_Heizungsart_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Heizungsart_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
     buses_df = buses_df.merge(Zensus2022_Heizungsart_100m, on="GITTER_ID_100m", how="left")
 
 
-    buses_df.rename(columns={col: f"Zensus_{col}" for col in buses_df.columns[2:]}, inplace=True)
+
+
+    # Zensus2022_Bevoelkerungszahl_100m = (pl.scan_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", separator=";")
+    #                                      .filter(pl.col("GITTER_ID_100m")
+    #                                              .is_in(columns)).select("GITTER_ID_100m",
+    #                                                                      "Einwohner").collect()
+    # )
+
+    # Zensus2022_Durchschn_Nettokaltmiete_100m = (pl.scan_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_100m-Gitter.csv", separator=";")
+    #                                             .filter(pl.col("GITTER_ID_100m").is_in(columns))
+    #                                             .select("GITTER_ID_100m",
+    #                                                     "durchschnMieteQM",
+    #                                                     ).collect()
+    # )
+
+    # Zensus2022_Eigentuemerquote_100m = (pl.scan_csv(ordner + "/Zensus2022_Eigentuemerquote_100m-Gitter.csv", separator=";")
+    #                                     .filter(pl.col("GITTER_ID_100m")
+    #                                     .is_in(columns)).select("GITTER_ID_100m",
+    #                                                             "Eigentuemerquote").collect()
+    #                                     )
+
+    # Zensus2022_Heizungsart_100m = (pl.scan_csv(ordner + "/Zensus2022_Heizungsart_100m-Gitter_utf8.csv", separator=";")
+    #                                .filter(pl.col("GITTER_ID_100m").is_in(columns))
+    #                                .select("GITTER_ID_100m",
+    #                                        "Insgesamt_Heizungsart",
+    #                                        "Fernheizung",
+    #                                        "Etagenheizung",
+    #                                        "Blockheizung",
+    #                                        "Zentralheizung",
+    #                                        "Einzel_Mehrraumoefen",
+    #                                        "keine_Heizung").collect()
+    # )
+
+
+
+    # Zensus2022_Bevoelkerungszahl_100m = Zensus2022_Bevoelkerungszahl_100m.to_pandas()
+    # Zensus2022_Durchschn_Nettokaltmiete_100m = Zensus2022_Durchschn_Nettokaltmiete_100m.to_pandas()
+    # Zensus2022_Eigentuemerquote_100m = Zensus2022_Eigentuemerquote_100m.to_pandas()
+    # Zensus2022_Heizungsart_100m = Zensus2022_Heizungsart_100m.to_pandas()
+
+    # Zensus2022_Bevoelkerungszahl_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Bevoelkerungszahl_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    # Zensus2022_Durchschn_Nettokaltmiete_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Durchschn_Nettokaltmiete_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    # Zensus2022_Eigentuemerquote_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Eigentuemerquote_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    # Zensus2022_Heizungsart_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Heizungsart_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+
+    # buses_df = buses_df.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
+    # buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_100m, on="GITTER_ID_100m", how="left")
+    # buses_df = buses_df.merge(Zensus2022_Eigentuemerquote_100m, on="GITTER_ID_100m", how="left")
+    # buses_df = buses_df.merge(Zensus2022_Heizungsart_100m, on="GITTER_ID_100m", how="left")
 
     # buses_df.rename(columns={"Einwohner": "Zensus_Einwohner",
     #                          "durchschnMieteQM": "Zensus_durchschnMieteQM",
@@ -464,9 +514,11 @@ def gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_fakt
         if sum_land != 0:
             weighted_sum *= sum_bus / sum_land
         else:
-            weighted_sum *= 0  
+            weighted_sum *= 0
 
-    return weighted_sum * technik_faktoren
+    print("Technik Faktoren:", technik_faktoren)
+
+    return weighted_sum * float(technik_faktoren.iloc[0])
 
 
 
