@@ -136,7 +136,7 @@ file_Technik = "input/Bev_data_Technik.csv"
 buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, data.kategorien_eigenschaften,  Bev_data_Zensus, file_Technik, Technik)
 
 # Technik in buses_df einfügen
-buses_df = mf.technik_fill(buses_df, Technik, factor_bbox*500)
+buses_df = mf.technik_fill(buses_df, Technik, factor_bbox)
 
 
 

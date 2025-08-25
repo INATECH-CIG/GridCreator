@@ -792,7 +792,7 @@ def env_wetter(bbox, time_discretization=3600, timesteps_horizon=8760, timesteps
     datasets = {}
     for var, cod in variables:
         filename = 'GER_' +var + '.nc'
-        ds = xr.open_dataset(os.path.join('weather_2013', filename))
+        ds = xr.open_dataset(os.path.join('input/weather_2013', filename))
         datasets[var] = ds
         print(f"Variable {var} verarbeitet.")
 

@@ -184,6 +184,7 @@ def technik_zuordnen(buses, file_Faktoren, kategorien_eigenschaften, Bev_data_Ze
     Bev_data_Technik = pd.read_csv(file_Technik, sep=",")
 
     Bev_data = pd.merge(Bev_data_Zensus, Bev_data_Technik, on="GEN", how="left")
+    Bev_data = Bev_data.set_index("GEN")
 
     df_land = buses['lan_name'].copy().to_frame()
 
@@ -257,9 +258,19 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     """
     Alle Loads erstmal löschen? Weil von ding0 und dann alle einheitlich?
     """
+    # Liste zum Hinzufügen von Loads
+    load_cols = {}
+    # Hinzufügen von buses
+    e_auto_buses = buses.index[buses["Power_E_car"].notna()]
+    e_auto_cols = {}
+    
     for bus in buses.index:
         print(f"Prüfe, ob Load für {bus} existiert...")
         existing = grid.loads[(grid.loads['bus'] == bus)]
+        """
+        Doch alle Loads erste entfehrnen, dann alle neu hinzufügen?
+        Würde e-auto erleichtern
+        """
         if existing.empty:
             # Lasten hinzufügen
             """
@@ -277,17 +288,27 @@ def loads_zuordnen(grid, buses, bbox, env=None):
             grid.add("Load",
                     name=bus + "_load",
                     bus=bus,
-                    carrier="AC",
-                    p_set=power)
+                    carrier="AC")
             print(f"Load {bus}_load jetzt hinzugefügt.")
+            load_cols[bus + "_load"] = power
+
+            if bus in e_auto_buses:
+                        power = demand_load.create_e_car(occ = occupants, index=snapshots, env=environment)
+                        grid.add("StorageUnit",
+                                name=bus + "_E_Auto",
+                                bus=bus,
+                                carrier="E_Auto")
+                        e_auto_cols[bus + "_E_Auto"] = power
+                        print(f"Generator {bus}_E_Auto hinzugefügt.")
+
         else:
             print(f"Load für {bus} existiert bereits.")
-    
 
-    print("Lasten hinzugefügt.")
+    # Alle neuen Spalten zu p_max_pu hinzufügen
+    grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
+    grid.storage_units_t.p = pd.concat([grid.storage_units_t.p, pd.DataFrame(e_auto_cols)], axis=1)
 
-    # Setzen von p_set
-    grid.generators_t.p_set = pd.DataFrame(index=grid.snapshots)
+    print("Lasten und E-Auto hinzugefügt.")
     """
     Carrier und Type komplett egal?
     """
@@ -336,7 +357,7 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     HP_amb_buses = buses.index[buses["Power_HP_ambient"] != 0]
     for bus in HP_amb_buses:
         # Generator hinzufügen
-        power = demand_load.create_hp(index=snapshots, env=environment)
+        power = demand_load.create_hp_amb(index=snapshots, env=environment)
         print(len(power), "Power:", power)
         
         grid.add("Generator",
@@ -350,14 +371,12 @@ def loads_zuordnen(grid, buses, bbox, env=None):
 
 
 
-    """
-    HP Geothermal und Ambient sind gleich, nur Carrier unterschiedlich
-    """
+
     #HP_geo_buses = buses.index[buses["Power_HP_geothermal"].notna()]
     HP_geo_buses = buses.index[buses["Power_HP_geothermal"] != 0]
     for bus in HP_geo_buses:
         # Generator hinzufügen
-        power = demand_load.create_hp(index=snapshots, env=environment)
+        power = demand_load.create_hp_geo(index=snapshots, env=environment)
         grid.add("Generator",
                 name=bus + "_HP_geothermal",
                 bus=bus,
