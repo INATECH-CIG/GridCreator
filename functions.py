@@ -11,6 +11,7 @@ import json
 from tqdm import tqdm
 from functools import reduce
 import numpy as np
+import ast
 from data import agg_dict
 
 import cdsapi
@@ -577,7 +578,7 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
 
 
 
-def technik_sortieren(buses, Technik, p_total):
+def technik_sortieren(buses, Technik, p_total, solar_power):
     """
     Sortiert die Busse nach der Technik und verteilt die Leistung gleichmäßig auf die Busse
     
@@ -585,7 +586,8 @@ def technik_sortieren(buses, Technik, p_total):
         buses (pd.DataFrame): DataFrame mit den Busdaten.
         Technik (str): Die Technik, die verteilt werden soll.
         p_total (float): Die gesamte Leistung, die verteilt werden soll.
-        
+        solar_power (float): Die installierte Solarleistung für die PLZ.
+
     Returns:
         pd.DataFrame: DataFrame mit den verteilten Leistungen für die Technik.
     """
@@ -607,6 +609,9 @@ def technik_sortieren(buses, Technik, p_total):
         # Vorhandene Solar in neue Spalte überschreiben
         buses.loc[mask_type1, 'Power_' + Technik] = buses.loc[mask_type1, 'p_nom_1']
         buses['Power_' + Technik] = buses['Power_' + Technik].fillna(0)
+
+    # Solar power von Marktstammdatenregister
+        p_total = solar_power
 
     else:
         p_bbox = 0
@@ -655,7 +660,38 @@ def technik_sortieren(buses, Technik, p_total):
     return buses
 
 
-def storage(buses):
+def solar_ausrichtung(buses, plz, pv_plz):
+    # Ausrichtung und Neigung für PV
+    ausrichtung = ast.literal_eval(pv_plz.loc[plz, 'Hauptausrichtung_Anteil'])
+    neigung = ast.literal_eval(pv_plz.loc[plz, 'HauptausrichtungNeigungswinkel_Anteil'])
+
+    print("Neigung:", neigung)
+
+    # Filtern der buses mit solar
+    df = buses[buses["Power_solar"] != 0].copy()
+
+    # Zuordnung der Ausrichtung
+    df["Hauptausrichtung"] = np.random.choice(
+        list(ausrichtung.keys()),          # mögliche Buchstaben
+        size=len(df),                  # Anzahl = Zeilenanzahl
+        p=list(ausrichtung.values())       # Wahrscheinlichkeiten
+    )
+
+    # Zuordnung der Neigung
+    df["HauptausrichtungNeigungswinkel"] = np.random.choice(
+        list(neigung.keys()),          # mögliche Buchstaben
+        size=len(df),                  # Anzahl = Zeilenanzahl
+        p=list(neigung.values())       # Wahrscheinlichkeiten
+    )
+
+    # Zuordnung von Ausrichtung und Neigung 
+    buses.loc[df.index, 'Hauptausrichtung'] = df['Hauptausrichtung']
+    buses.loc[df.index, 'HauptausrichtungNeigungswinkel'] = df['HauptausrichtungNeigungswinkel']
+    
+    return buses
+
+
+def storage(buses, storage_pv):
     """
     Fügt eine Spalte 'speicher' zu den Bussen hinzu, die den Speicherbedarf für Solarenergie berechnet.
     
@@ -669,7 +705,7 @@ def storage(buses):
     '''
     Prob kann noch mit Martstammdatenregister angepasst werden. Verhältnis für jede PLZ bestimmen
     '''
-    prob = 0.8 # 80% der Solaranlagen haben einen Speicher
+    prob = storage_pv 
     
     # np.random.seed(seed) # Setze einen Seed für Reproduzierbarkeit
     buses = buses.copy()

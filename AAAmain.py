@@ -26,7 +26,7 @@ bbox = [left, bottom, right, top]
 
 # Speichern vom Grid
 output_file_grid = "dist_grid.nc"
-grids_dir = "grids" 
+grids_dir = "input/grids" 
 
 #Grid creation
 grid_1, bbox_1 = mf.ding0_grid(bbox, grids_dir, output_file_grid)
@@ -59,7 +59,7 @@ buffer = 0.0002  # entspricht ungefähr 20 m
 buses_df, area, features = mf.osm_data(grid_1, buses_df, bbox_1, buffer)
 
 # Bundesland-Daten
-gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
+gpd_bundesland = gpd.read_file("input/georef-germany-postleitzahl.geojson")
 
 # # buses als csv speichern
 # grid_2.buses.to_csv("buses.csv")
@@ -69,7 +69,7 @@ gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
 Ordner zensus_daten enthält nur kleinen Tewil aller Zensus-Tabellen, um die Ladezeiten zu verkürzen.
 Alle Tabellen sind im Ordner zensus_daten_all enthalten.
 """
-ordner = "zensus_daten"
+ordner = "input/zensus_daten"
 #zensus = mf.daten_laden(ordner)
 
 """
@@ -125,14 +125,14 @@ Zensusdaten fehlen und müssen nocheinmal für Bundesländer addiert werden!
 """
 
 # Zensusdaten für Bundesland
-Bev_data_Zensus = mf.bundesland_zensus(ordner, "DE_VG5000.gpkg", buses_df["lan_name"].values[0])
+Bev_data_Zensus = mf.bundesland_zensus(ordner, "input/DE_VG5000.gpkg", buses_df["lan_name"].values[0])
 
 # Technik definieren
 Technik = ['solar', 'HP_ambient', 'HP_geothermal', 'E_car']
 
 # Technik zuordnen
-file_Faktoren = "Faktoren.csv"
-file_Technik = "Bev_data_Technik.csv"
+file_Faktoren = "input/Faktoren.csv"
+file_Technik = "input/Bev_data_Technik.csv"
 buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, data.kategorien_eigenschaften,  Bev_data_Zensus, file_Technik, Technik)
 
 # Technik in buses_df einfügen
@@ -143,11 +143,6 @@ buses_df = mf.technik_fill(buses_df, Technik, factor_bbox*500)
 #%% STEP 4
 
 # Zeitreihen hinzufügen
-
-'''
-Zeitreihen sind spezifischen buses zugeordnet!
-Funktioniert also auch nur für ausgewählte Koordinaten!
-'''
 
 grid_1 = mf.loads_zuordnen(grid_1, buses_df, bbox_1)
 

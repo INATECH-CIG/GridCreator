@@ -217,10 +217,18 @@ def technik_fill(buses, Technik, p_total):
         grid: Das aktualisierte Grid-Objekt mit den zugeordneten Techniken.
     """
 
+    pv_plz = pd.read_csv("input/mastr_values_per_plz.csv", sep=",").set_index("PLZ")
+    plz = int(buses['plz_code'].values[0])
+    solar_power = pv_plz.loc[plz, 'Solar_Installed_Capacity_[MW]']
+
     for tech, p in zip(Technik, p_total):
-        buses = func.technik_sortieren(buses, tech, p)
+        buses = func.technik_sortieren(buses, tech, p, solar_power)
+
+    buses = func.solar_ausrichtung(buses, plz, pv_plz)
+
+    storage_pv = pv_plz.loc[plz, 'Storage_per_PV']
         
-    buses = func.storage(buses)
+    buses = func.storage(buses, storage_pv)
 
     return buses
 
