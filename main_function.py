@@ -264,49 +264,49 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     e_auto_buses = buses.index[buses["Power_E_car"].notna()]
     e_auto_cols = {}
     
-    for bus in buses.index:
-        print(f"Prüfe, ob Load für {bus} existiert...")
-        existing = grid.loads[(grid.loads['bus'] == bus)]
-        """
-        Doch alle Loads erste entfehrnen, dann alle neu hinzufügen?
-        Würde e-auto erleichtern
-        """
-        if existing.empty:
-            # Lasten hinzufügen
-            """
-            Max. allowed number of occupants per apartment is 5
-            """
-            # power = demand_load.create_haus(people=buses.loc[bus, 'Zensus_Einwohner_sum'], env=environment)
-            power, occupants = demand_load.create_haus(people=3, index=snapshots, env=environment)
-            # Hier wird angenommen, dass p_set eine Serie ist, die die Lasten für jede Stunde enthält
-            # power = pd.Series(power[:len(grid.snapshots)], index=grid.snapshots)
-            print("Snapshots grid:", grid.snapshots)
-            print("Index power:", power.index)
-            print("Sind sie gleich? ", power.index.equals(grid.snapshots))
+    # for bus in buses.index:
+    #     print(f"Prüfe, ob Load für {bus} existiert...")
+    #     existing = grid.loads[(grid.loads['bus'] == bus)]
+    #     """
+    #     Doch alle Loads erste entfehrnen, dann alle neu hinzufügen?
+    #     Würde e-auto erleichtern
+    #     """
+    #     if existing.empty:
+    #         # Lasten hinzufügen
+    #         """
+    #         Max. allowed number of occupants per apartment is 5
+    #         """
+    #         # power = demand_load.create_haus(people=buses.loc[bus, 'Zensus_Einwohner_sum'], env=environment)
+    #         power, occupants = demand_load.create_haus(people=3, index=snapshots, env=environment)
+    #         # Hier wird angenommen, dass p_set eine Serie ist, die die Lasten für jede Stunde enthält
+    #         # power = pd.Series(power[:len(grid.snapshots)], index=grid.snapshots)
+    #         print("Snapshots grid:", grid.snapshots)
+    #         print("Index power:", power.index)
+    #         print("Sind sie gleich? ", power.index.equals(grid.snapshots))
 
-            print(f"Load {bus}_load wird hinzugefügt.")
-            grid.add("Load",
-                    name=bus + "_load",
-                    bus=bus,
-                    carrier="AC")
-            print(f"Load {bus}_load jetzt hinzugefügt.")
-            load_cols[bus + "_load"] = power
+    #         print(f"Load {bus}_load wird hinzugefügt.")
+    #         grid.add("Load",
+    #                 name=bus + "_load",
+    #                 bus=bus,
+    #                 carrier="AC")
+    #         print(f"Load {bus}_load jetzt hinzugefügt.")
+    #         load_cols[bus + "_load"] = power
 
-            if bus in e_auto_buses:
-                        power = demand_load.create_e_car(occ = occupants, index=snapshots, env=environment)
-                        grid.add("StorageUnit",
-                                name=bus + "_E_Auto",
-                                bus=bus,
-                                carrier="E_Auto")
-                        e_auto_cols[bus + "_E_Auto"] = power
-                        print(f"Generator {bus}_E_Auto hinzugefügt.")
+    #         if bus in e_auto_buses:
+    #                     power = demand_load.create_e_car(occ = occupants, index=snapshots, env=environment)
+    #                     grid.add("StorageUnit",
+    #                             name=bus + "_E_Auto",
+    #                             bus=bus,
+    #                             carrier="E_Auto")
+    #                     e_auto_cols[bus + "_E_Auto"] = power
+    #                     print(f"Generator {bus}_E_Auto hinzugefügt.")
 
-        else:
-            print(f"Load für {bus} existiert bereits.")
+    #     else:
+    #         print(f"Load für {bus} existiert bereits.")
 
-    # Alle neuen Spalten zu p_max_pu hinzufügen
-    grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
-    grid.storage_units_t.p = pd.concat([grid.storage_units_t.p, pd.DataFrame(e_auto_cols)], axis=1)
+    # # Alle neuen Spalten zu p_max_pu hinzufügen
+    # grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
+    # grid.storage_units_t.p = pd.concat([grid.storage_units_t.p, pd.DataFrame(e_auto_cols)], axis=1)
 
     print("Lasten und E-Auto hinzugefügt.")
     """
@@ -327,7 +327,22 @@ def loads_zuordnen(grid, buses, bbox, env=None):
         Power für Solar ist immer 0, warum?
         Im Test gab es schöne Kurven
         """
-        power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], index=snapshots, env=environment)
+        beta = buses.loc[bus, 'HauptausrichtungNeigungswinkel_Anteil']
+        gamma = buses.loc[bus, 'Hauptausrichtung_Anteil']
+        print(f"Beta: {beta}, Gamma: {gamma}")
+
+        # Ost-Weste wird in zwei halbe PV aufgeteilt
+        if gamma == 'Ost-West':
+            gamma_1 = 'Ost'
+            gamma_2 = 'West'
+            power_1 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_1, index=snapshots, env=environment)
+            power_2 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_2, index=snapshots, env=environment)
+            print(f"Power 1: {power_1}, Power 2: {power_2}")
+            power = power_1 + power_2
+            print(f"Power: {power}")
+        else:
+            power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
+        
         if existing.empty:
             # Generator hinzufügen
             

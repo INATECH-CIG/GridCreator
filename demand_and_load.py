@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+
+from data import solar_dict
 #%% PyCity-Module
 from pycity_base.classes.timer import Timer
 from pycity_base.classes.weather import Weather
@@ -72,7 +74,7 @@ def create_e_car(env, occ, index):
     return laden
 
 
-def create_pv(env, peakpower, index, area=10.0, eta_noct=0.15, beta=30, meth = 1):
+def create_pv(env, peakpower, index, beta, gamma, area=10.0, eta_noct=0.15, meth=1):
     # Umgebung (Timer, Wetter, Preise)
 
 
@@ -80,7 +82,9 @@ def create_pv(env, peakpower, index, area=10.0, eta_noct=0.15, beta=30, meth = 1
     # PV-Anlage erstellen
     # Nur peakpower nötig, wenn method = 1
     # wenn method = 0, dann area, eta_noct und beta nötig
-    pv_system = pv.PV(peak_power=peakpower, environment=env, area=area, eta_noct=eta_noct, beta=beta, method=meth)
+    gamma = solar_dict[gamma]
+
+    pv_system = pv.PV(peak_power=peakpower, environment=env, area=area, eta_noct=eta_noct, beta=beta, gamma=gamma, method=meth)
     
     # Berechnung der PV-Leistung
     pv_power = pv_system.getPower()

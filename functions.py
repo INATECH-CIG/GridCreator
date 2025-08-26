@@ -671,23 +671,23 @@ def solar_ausrichtung(buses, plz, pv_plz):
     df = buses[buses["Power_solar"] != 0].copy()
 
     # Zuordnung der Ausrichtung
-    df["Hauptausrichtung"] = np.random.choice(
+    df["Hauptausrichtung_Anteil"] = np.random.choice(
         list(ausrichtung.keys()),          # mögliche Buchstaben
         size=len(df),                  # Anzahl = Zeilenanzahl
         p=list(ausrichtung.values())       # Wahrscheinlichkeiten
     )
 
     # Zuordnung der Neigung
-    df["HauptausrichtungNeigungswinkel"] = np.random.choice(
+    df["HauptausrichtungNeigungswinkel_Anteil"] = np.random.choice(
         list(neigung.keys()),          # mögliche Buchstaben
         size=len(df),                  # Anzahl = Zeilenanzahl
         p=list(neigung.values())       # Wahrscheinlichkeiten
     )
 
     # Zuordnung von Ausrichtung und Neigung 
-    buses.loc[df.index, 'Hauptausrichtung'] = df['Hauptausrichtung']
-    buses.loc[df.index, 'HauptausrichtungNeigungswinkel'] = df['HauptausrichtungNeigungswinkel']
-    
+    buses.loc[df.index, 'Hauptausrichtung_Anteil'] = df['Hauptausrichtung_Anteil']
+    buses.loc[df.index, 'HauptausrichtungNeigungswinkel_Anteil'] = df['HauptausrichtungNeigungswinkel_Anteil']
+
     return buses
 
 
