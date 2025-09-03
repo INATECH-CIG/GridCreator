@@ -124,17 +124,17 @@ plt.show()
 Zensusdaten fehlen und müssen nocheinmal für Bundesländer addiert werden!
 """
 
-# Zensusdaten für Bundesland
-Bev_data_Zensus = mf.bundesland_zensus(ordner, "input/DE_VG5000.gpkg", buses_df["lan_name"].values[0])
-
 # Technik definieren
-Technik = ['solar', 'HP_ambient', 'HP_geothermal', 'E_car']
+Technik = ['solar', 'E_car', 'HP']
 
 # Technik zuordnen
 file_Faktoren = "input/Faktoren.csv"
-file_Technik = "input/Bev_data_Technik.csv"
-buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, data.kategorien_eigenschaften,  Bev_data_Zensus, file_Technik, Technik)
+file_solar = "input/Bev_data_solar.csv"
+file_ecar = "input/Bev_data_ecar.csv"
+file_hp = 'input/Bev_data_hp.csv'
+buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, file_solar, file_ecar, file_hp, Technik)
 
+#%%
 # Technik in buses_df einfügen
 buses_df = mf.technik_fill(buses_df, Technik, factor_bbox)
 

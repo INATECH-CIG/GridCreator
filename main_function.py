@@ -5,6 +5,7 @@ import data_combination as dc
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+from data import agg_dict
 import os
 import demand_and_load as demand_load
 from pycity_base.classes.timer import Timer
@@ -164,42 +165,64 @@ def bundesland_zensus(ordner, datei, bundesland):
 
 
 
-def technik_zuordnen(buses, file_Faktoren, kategorien_eigenschaften, Bev_data_Zensus, file_Technik, technik_arr):
-    """
-    Ordnet den Bussen im Grid verschiedene Techniken zu und berechnet die entsprechenden Faktoren.
-    Args:
-        grid: Das Grid-Objekt, das die Buslinien enthält.
-        factors: Ein Dictionary mit den Faktoren für jede Technik.
-        kategorien_eigenschaften: Die Kategorien der Eigenschaften, die für die Zuordnung verwendet werden.
-        Bev_data_Zensus: DataFrame mit den Zensusdaten.
-        Bev_data_Technik: DataFrame mit den Technikinformationen.
-        technik_arr: Liste der Techniken, die zugeordnet werden sollen.
-        
-    Returns:
-        tuple: Ein Tupel bestehend aus dem aktualisierten Grid-Objekt und einem Array der Faktor-Bounding Box.
-    """
-
+def technik_zuordnen(buses, file_Faktoren, file_solar, file_ecar, file_hp, technik_arr):
     Technik_Faktoren = pd.read_csv(file_Faktoren, sep=";")
     Technik_Faktoren = Technik_Faktoren.set_index("Technik")
-    Bev_data_Technik = pd.read_csv(file_Technik, sep=",")
 
-    Bev_data = pd.merge(Bev_data_Zensus, Bev_data_Technik, on="GEN", how="left")
-    Bev_data = Bev_data.set_index("GEN")
+    Bev_data_solar = pd.read_csv(file_solar, sep=",")
+    Bev_data_solar["PLZ"] = Bev_data_solar["PLZ"].astype(int).astype(str).str.zfill(5)
+    Bev_data_solar.set_index("PLZ", inplace=True)
 
-    df_land = buses['lan_name'].copy().to_frame()
 
-    df_zensus = buses[[col for col in buses.columns if col.startswith("Zensus")]].copy()
+    Bev_data_ecar = pd.read_csv(file_ecar, sep=",")
+    Bev_data_ecar.set_index("id_5km", inplace=True)
+
+
+    Bev_data_hp = pd.read_csv(file_hp, sep=",")
+    Bev_data_hp.set_index("GEN", inplace=True)
+
+    #Bev_data_Zensus.set_index("GEN", inplace=True)
+
+    buses_zensus = buses[[col for col in buses.columns if col.startswith("Zensus")]].copy()
+    buses_zensus.drop(columns=["Zensus_Einwohner"], inplace=True)
     # Kommas durch Punkte ersetzen, damit pd.to_numeric klappt; In float umwandeln; Fehlende Werte auf 0 setzen
-    df_zensus = (df_zensus.astype(str).replace(",", ".", regex=True).apply(pd.to_numeric, errors="coerce").fillna(0.0))
+    buses_zensus = (buses_zensus.astype(str).replace(",", ".", regex=True).apply(pd.to_numeric, errors="coerce").fillna(0.0))
+    bbox_zensus = buses_zensus.agg(agg_dict)
 
-    df_eigenschaften = pd.concat([df_land, df_zensus], axis=1)
+    
 
     factor_bbox = np.array([0.0] * len(technik_arr))
-    for i, technik in enumerate(technik_arr):
-        print(f"Berechne Faktoren für {technik}...")
-        factors_technik = Technik_Faktoren.loc[technik]
-        print('Berechne Faktoren für', factors_technik)
-        buses['Factor_' + technik], factor_bbox[i] = func.calculate_factors(df_eigenschaften, factors_technik, kategorien_eigenschaften, Bev_data, technik)
+    
+    # Berechnung Solar
+    if 'solar' in technik_arr:
+        buses_plz = buses['plz_code'].copy().to_frame()
+        # buses_plz.reset_index(drop=True, inplace=True)
+        print(buses_plz)
+        technik = 'solar'
+        i = technik_arr.index(technik)
+        buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_solar, bbox_zensus, 'solar', buses_plz)
+
+
+    # Berechnung E-Car
+
+    '''
+    Die ID muss den buses noch hinzugefügt werden
+    '''
+    if 'E_car' in technik_arr:
+        buses_5km = func.raster_5_id(buses)
+        technik = 'E_car'
+        i = technik_arr.index(technik)
+        buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_ecar, bbox_zensus, 'E_car', buses_5km)
+
+
+
+    # Berechnung HP
+    if 'HP' in technik_arr:
+        buses_land = buses['lan_name'].copy().to_frame()
+        technik = 'HP'
+        i = technik_arr.index(technik)
+        buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_hp, bbox_zensus, 'HP', buses_land)
+
 
     return buses, factor_bbox
 
@@ -318,7 +341,7 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     """
     #solar_buses = buses.index[buses["Power_solar"].notna()]
     solar_buses = buses.index[buses["Power_solar"] != 0]
-    
+    solar_cols = {}
     for bus in solar_buses:
         print(f"Prüfe, ob Generator für {bus} existiert...")
         existing = grid.generators[(grid.generators['bus'] == bus)]
@@ -335,13 +358,13 @@ def loads_zuordnen(grid, buses, bbox, env=None):
         if gamma == 'Ost-West':
             gamma_1 = 'Ost'
             gamma_2 = 'West'
-            power_1 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_1, index=snapshots, env=environment)
-            power_2 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_2, index=snapshots, env=environment)
-            print(f"Power 1: {power_1}, Power 2: {power_2}")
+            power_1 = demand_load.create_pv(peakpower=100*buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_1, index=snapshots, env=environment)
+            power_2 = demand_load.create_pv(peakpower=100*buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_2, index=snapshots, env=environment)
+
             power = power_1 + power_2
-            print(f"Power: {power}")
+
         else:
-            power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
+            power = demand_load.create_pv(peakpower=100*buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
         
         if existing.empty:
             # Generator hinzufügen
@@ -354,51 +377,41 @@ def loads_zuordnen(grid, buses, bbox, env=None):
                     p_nom=buses.loc[bus, 'Power_solar'])
             
 
-            grid.generators_t.p_max_pu[bus + "_solar"] = power.values
+            solar_cols[bus + "_solar"] = power.values
 
-            print(f"Generator {bus}_solar hinzugefügt.")
+
 
         else:
             # Load zu existierendem Generator hinzufügen
-            grid.generators_t.p_max_pu[bus + "_solar"] = power.values
-
-            print(f"Generator für {bus} existiert bereits.")
+            solar_cols[bus + "_solar"] = power.values
 
 
+
+
+    if solar_cols:
+        grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
 
     print("Solargeneratoren hinzugefügt.")
 
     #HP_amb_buses = buses.index[buses["Power_HP_ambient"].notna()]
-    HP_amb_buses = buses.index[buses["Power_HP_ambient"] != 0]
-    for bus in HP_amb_buses:
+    HP_buses = buses.index[buses["Power_HP"] != 0]
+    hp_cols = {}
+    for bus in HP_buses:
         # Generator hinzufügen
-        power = demand_load.create_hp_amb(index=snapshots, env=environment)
-        print(len(power), "Power:", power)
+        power = demand_load.create_hp(index=snapshots, env=environment)
+
         
         grid.add("Generator",
-                name=bus + "_HP_ambient",
+                name=bus + "_HP",
                 bus=bus,
-                carrier="HP_ambient", # carrier definieren, damit es nicht mit anderen HPs kollidiert
-                type="HP_ambient") # eventuell nicht so wichtig
-        grid.generators_t.p_max_pu[bus + "_HP_ambient"] = power.values
-
-        print(f"Generator {bus}_HP_ambient hinzugefügt.")
+                carrier="HP",
+                type="HP")
+        hp_cols[bus + "_HP"] = power.values
 
 
-
-
-    #HP_geo_buses = buses.index[buses["Power_HP_geothermal"].notna()]
-    HP_geo_buses = buses.index[buses["Power_HP_geothermal"] != 0]
-    for bus in HP_geo_buses:
-        # Generator hinzufügen
-        power = demand_load.create_hp_geo(index=snapshots, env=environment)
-        grid.add("Generator",
-                name=bus + "_HP_geothermal",
-                bus=bus,
-                carrier="HP_geothermal",
-                type="HP_geothermal")
-        grid.generators_t.p_max_pu[bus + "_HP_geothermal"] = power.values
-
+    if hp_cols:
+        grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
+    
     return grid
 
 def pypsa_vorbereiten(grid):

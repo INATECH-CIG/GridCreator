@@ -97,7 +97,7 @@ def create_pv(env, peakpower, index, beta, gamma, area=10.0, eta_noct=0.15, meth
 
 
 
-def create_hp_amb(index, hp_params=None, flow_temp=None, schedule= None, env=None):
+def create_hp(index, env, hp_params=None, flow_temp=None, schedule= None):
     """
     Erzeugt ein Wärmepumpen-Profil.
 
@@ -184,92 +184,4 @@ def create_hp_amb(index, hp_params=None, flow_temp=None, schedule= None, env=Non
     power_series = pd.Series(power, index=index, name='hp_power_kw')
 
     return power_series # Rückgabe nur von elektrischer Leistung
-
-
-
-def create_hp_geo(index, hp_params=None, flow_temp=None, schedule= None, env=None):
-    """
-    Erzeugt ein Wärmepumpen-Profil.
-
-    Args:
-        index: Zeitstempel für das Wärmepumpen-Profil
-        hp_params: Parameter für die Wärmepumpe (optional)
-        flow_temp: Vorlauftemperatur (optional, Standardwert wird verwendet)
-        schedule: Betriebsprofil der Wärmepumpe (optional, Standardwert wird verwendet)
-        env: Environment-Objekt (optional, falls benötigt)
-
-    Returns:
-        power_series: Pandas-Serie mit der elektrischen Leistung der Wärmepumpe in kW
-    """
-
-    if hp_params is None:
-        '''
-        Werte sind von ChatGPT
-        '''
-        hp_params = {
-                    "t_ambient": np.array([0, 10, 20]), # Soletemperaturen variieren viel weniger
-                    "t_flow": np.array([35, 45, 55]),
-                    "heat": np.array([                  # abgegebene Heizleistung [kW]
-                        [5.5, 5.5, 5.5],
-                        [6.0, 6.0, 6.0],
-                        [6.5, 6.5, 6.5]
-                    ]),
-                    "power": np.array([                 # elektrische Leistungsaufnahme [kW]
-                        [1.7, 1.8, 1.9],
-                        [1.6, 1.7, 1.8],
-                        [1.5, 1.6, 1.7]
-                    ]),
-                    "cop": np.array([                   # COP stabiler & höher
-                        [3.24, 3.06, 2.89],
-                        [3.75, 3.56, 3.35],
-                        [4.33, 4.12, 3.82]
-                    ]),
-                    "t_max": 55,
-                    "lower_activation_limit": 0.5
-                }
-
-
-    # Wärmepumpe erstellen
-    heatpump = hp.Heatpump(env, **hp_params)
-
-    # Dummy-Vorlauftemperatur über Zeitschritte (z. B. 35 °C ± Zufall)
-    """
-    Standardwert oder variabel simulierbar?
-        Bsp:
-            if flow_temp is None:
-                t_inside = 21
-                a, b = 0.5, 35
-                t_ambient_series = environment.weather.t_ambient
-                flow_temp = a * (t_inside - t_ambient_series) + b  # einfache Heizkurve
-    """
-    # Dummy-Vorlauftemperatur über Zeitschritte (z. B. 35 °C ± Zufall)
-    if flow_temp is None:
-        flow_temp = np.full(len(index), 45)
-
-    # Nominalwerte berechnen
-    nominals= heatpump.getNominalValues(flow_temp)
-
-
-    # Einfaches Betriebsprofil (z. B. Zufall ein/aus)
-    if schedule is None:
-        schedule = (env.weather.t_ambient < 15).astype(int)
-    """
-    Wie entscheide ich wann HP läuft?
-
-        Ein realistischer Betrieb ergibt sich z.B. aus dem:
-            Wärmebedarf (z.B. aus SpaceHeating oder HeatingDemand)
-            Regelstrategie (z.B. einfache Zwei-Punkt-Regelung)
-            Temperaturvergleich (Innensoll vs. Raumtemp)
-            Bsp:
-                schedule = (environment.weather.t_ambient < 15).astype(int)
-    """
-
-    # Verbrauch und Erzeugung berechnen
-    power = nominals[0] * schedule
-
-    # Rückgabe als Pandas-Serie
-    power_series = pd.Series(power, index=index, name='hp_power_kw')
-
-    return power_series # Rückgabe nur von elektrischer Leistung
-
 

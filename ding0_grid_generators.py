@@ -39,6 +39,10 @@ def extract_lv_subnetwork_to_nearest_transformers(start_buses, grids_dir):
     network_path = os.path.join(grids_dir, grid_id, "topology")
     net = pypsa.Network(network_path)
 
+    # LV-only Graph aufbauen (nur für Pfadsuche!)
+    G_lv = build_lv_only_graph(net)
+    buses_vn = net.buses["v_nom"].to_dict()
+
     # LV-Seite aller Transformatoren (immer bus1)
     lv_transformer_buses_all = net.transformers["bus1"].unique()
 
@@ -49,11 +53,7 @@ def extract_lv_subnetwork_to_nearest_transformers(start_buses, grids_dir):
     if lv_transformer_buses_in_bbox:
         lv_targets = lv_transformer_buses_in_bbox
     else:
-        lv_targets = lv_transformer_buses_all
-
-    # LV-only Graph aufbauen (nur für Pfadsuche!)
-    G_lv = build_lv_only_graph(net)
-    buses_vn = net.buses["v_nom"].to_dict()
+        lv_targets = [bus for bus in lv_transformer_buses_all if bus in G_lv.nodes]
 
     # Relevante Busse entlang der Pfade sammeln
     relevant_buses = set()

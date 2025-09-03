@@ -578,6 +578,50 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
 
 
 
+def raster_5_id(net_buses):
+
+    data = gpd.read_file("input/FZ_Pkw_mit_Elektro_Antrieb_Regionen_Gitterzellen2024_6922366346781309644.geojson")
+
+    # Bus Koordinaten in GeoDataFrame umwandeln
+    gdf_buses = gpd.GeoDataFrame(net_buses.copy(), geometry=gpd.points_from_xy(net_buses["x"], net_buses["y"]), crs=data.crs)
+
+    # Shape, Punkt Join
+    gdf_joined = gpd.sjoin(gdf_buses, data[["id_5km", "geometry"]], how="left", predicate="within")
+    # ID filtern für jeden Bus
+    id = gdf_joined["id_5km"].copy()
+
+    return id
+
+
+def faktoren(buses_zensus, Technik_Faktoren, Bev_data, bbox_zensus, technik, id_df):
+        arr_factor = pd.Series(0.0, index=buses_zensus.index)
+        #land = buses_land.iloc[0, 0]
+        Bev_data_Zensus = Bev_data[[col for col in Bev_data.columns if col.startswith("Zensus")]].copy()
+        
+        '''
+        Auf Cluster unnötig
+        '''
+        Bev_data_Zensus = Bev_data_Zensus[list(Technik_Faktoren.columns)]
+        buses_zensus = buses_zensus[list(Technik_Faktoren.columns)]
+
+        Bev_data_Technik = Bev_data[technik].copy()
+        id = id_df.iloc[0]
+        factor_area = Bev_data_Zensus.loc[id] @ Technik_Faktoren.loc[technik]
+        for j, zensus in buses_zensus.iterrows():
+            print(id_df)
+            id = id_df.loc[j]
+            print('zensus:', zensus)
+            print('Technik_Faktoren.loc[technik]:', Technik_Faktoren.loc[technik])
+            factor_bus = zensus @ Technik_Faktoren.loc[technik]
+            # # Für jeden bus einzeln das Bundesland bestimmen ?
+            # land = buses_land.iloc[j, 0]
+            # factor_land = Bev_data_Zensus.loc[land] @ factors[technik]
+            arr_factor.loc[j] = factor_bus / factor_area * Bev_data_Technik.loc[id]
+        factor_bbox = bbox_zensus @ Technik_Faktoren.loc[technik] / factor_area * Bev_data_Technik.loc[id]
+        return arr_factor, factor_bbox
+        
+
+
 def technik_sortieren(buses, Technik, p_total, solar_power):
     """
     Sortiert die Busse nach der Technik und verteilt die Leistung gleichmäßig auf die Busse
@@ -805,9 +849,9 @@ def env_wetter(bbox, time_discretization=3600, timesteps_horizon=8760, timesteps
     
     # Mittelpunkt von bbox
     # Berechnet den Mittelpunkt der Bounding Box.
-    # bbox: [N, W, S, E] (Nord, West, Süd, Ost)
-    lat_target = (bbox[0] + bbox[2]) / 2
-    lon_target = (bbox[1] + bbox[3]) / 2
+    # bbox: [N, W, S, E] [left, bottom, right, top]
+    lat_target = (bbox[3] + bbox[1]) / 2
+    lon_target = (bbox[0] + bbox[2]) / 2
 
     data_dict = {}
 
