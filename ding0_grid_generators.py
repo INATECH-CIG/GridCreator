@@ -6,7 +6,20 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-def extract_lv_subnetwork_to_nearest_transformers(start_buses, grids_dir):
+def extract_lv_subnetwork_to_nearest_transformers(start_buses: pd.DataFrame, grids_dir: str) -> pypsa.Network:
+    """
+    Extrahiert das Niederspannungs-Teilnetz, das die angegebenen Start-Busse
+    mit den nächstgelegenen Niederspannungs-Transformatoren verbindet.
+    Berücksichtigt dabei nur Leitungen, die ausschließlich Niederspannungs-Busse verbinden.
+    
+    Args:
+        start_buses (pd.DataFrame): DataFrame mit den Start-Bussen (muss eine 'name'-Spalte enthalten).
+        grids_dir (str): Verzeichnis, in dem die Netzdaten gespeichert sind.
+        
+    Returns:
+        pypsa.Network: Das extrahierte Niederspannungs-Teilnetz.
+    """
+
 
     def build_lv_only_graph(net, voltage_threshold=0.4):
         """Erzeugt einen NetworkX-Graph mit nur LV-Leitungen."""
@@ -105,7 +118,19 @@ def extract_lv_subnetwork_to_nearest_transformers(start_buses, grids_dir):
 
 
 
-def load_buses_in_bbox(bbox, base_path):
+def load_buses_in_bbox(bbox: tuple, base_path: str) -> pd.DataFrame:
+    """
+    Lädt alle Busse aus den Netzen im angegebenen Verzeichnis, die innerhalb der
+    gegebenen BBOX liegen.
+    
+    Args:
+        bbox (tuple): BBOX im Format (min_x, min_y, max_x, max_y).
+        base_path (str): Verzeichnis mit den Netz-Unterordnern. 
+        
+    Returns:
+        pd.DataFrame: DataFrame mit allen Bussen innerhalb der BBOX.
+    """
+
     min_x, min_y, max_x, max_y = bbox
     all_buses = []  # Liste aller gefilterten Bus-DataFrames
 
@@ -138,7 +163,20 @@ def load_buses_in_bbox(bbox, base_path):
 
 
 
-def load_grid(bbox, grids_dir):
+def load_grid(bbox: tuple, grids_dir: str) -> pypsa.Network:
+    """
+    Lädt das Ding0-Netz und extrahiert das Niederspannungs-Teilnetz,
+    das die Busse innerhalb der gegebenen BBOX mit den nächstgelegenen
+    Niederspannungs-Transformatoren verbindet.
+    
+    Args:
+        bbox (tuple): BBOX im Format (min_x, min_y, max_x, max_y).
+        grids_dir (str): Verzeichnis mit den Netz-Unterordnern.
+        
+    Returns:
+        pypsa.Network: Das extrahierte Niederspannungs-Teilnetz.
+    """
+    
     filtered_buses = load_buses_in_bbox(bbox, grids_dir)
     grid = extract_lv_subnetwork_to_nearest_transformers(filtered_buses, grids_dir)
     return grid

@@ -19,9 +19,21 @@ import pycity_base.classes.supply.heat_pump as hp
 
 
 #%%
-def create_haus(env, people, index, light_config = 10, meth = 2, weather_file=None):
-
-
+def create_haus(env: Environment, people: int, index: pd.Index, light_config: int = 10, meth: int = 2, weather_file: str = None) -> tuple[pd.Series, Occupancy]:
+    """
+    Erstellt ein Haushalts-Objekt mit elektrischer Last.
+    
+    Args:
+        env (Environment): Die Simulationsumgebung.
+        people (int): Anzahl der Personen im Haushalt.
+        index (pd.Index): Zeitstempel für die Lastprofile.
+        light_config (int, optional): Konfiguration für die Beleuchtung. Standard ist 10.
+        meth (int, optional): Methode zur Lastgenerierung. Standard ist 2.
+        weather_file (str, optional): Pfad zur Wetterdatei. Standard ist None.
+    
+    Returns:
+        tuple[pd.Series, Occupancy]: Ein Tupel mit der elektrischen Last als Pandas-Serie und dem Occupancy-Objekt.
+    """
 
     # Nutzerprofil (3 Personen im Haushalt)
     occupancy = Occupancy(env, number_occupants=people)
@@ -52,7 +64,19 @@ def create_haus(env, people, index, light_config = 10, meth = 2, weather_file=No
                                 # nutzen willst
 
 
-def create_e_car(env, occ, index):
+def create_e_car(env: Environment, occ: Occupancy, index: pd.Index) -> pd.Series:
+    """
+    Erstellt ein E-Auto-Ladeprofil basierend auf dem Belegungsprofil.
+
+    Args:
+        env (Environment): Die Simulationsumgebung.
+        occ (Occupancy): Das Belegungsprofil.
+        index (pd.Index): Zeitstempel für das Ladeprofil.
+
+    Returns:
+        pd.Series: Das E-Auto-Ladeprofil als Pandas-Serie.
+    """
+
     """
     Auto wird geladen wenn alle Bewhoner da sind
     """
@@ -74,7 +98,24 @@ def create_e_car(env, occ, index):
     return laden
 
 
-def create_pv(env, peakpower, index, beta, gamma, area=10.0, eta_noct=0.15, meth=1):
+def create_pv(env: Environment, peakpower: float, index: pd.Index, beta: float, gamma: str, area: float = 10.0, eta_noct: float = 0.15, meth: int = 1) -> pd.Series:
+    """
+    Erstellt ein PV-Profil.
+
+    Args:
+        env (Environment): Die Simulationsumgebung.
+        peakpower (float): Die installierte Peak-Leistung der PV-Anlage in kW.
+        index (pd.Index): Zeitstempel für das PV-Profil.
+        beta (float): Neigungswinkel der PV-Anlage in Grad.
+        gamma (str): Ausrichtung der PV-Anlage (z.B. 'Süd', 'Ost', etc.).
+        area (float, optional): Fläche der PV-Anlage in m². Standard ist 10.0.
+        eta_noct (float, optional): Wirkungsgrad bei Nennbetriebsbedingungen. Standard ist 0.15.
+        meth (int, optional): Methode zur PV-Leistungsermittlung. Standard ist 1.
+
+    Returns:
+        pd.Series: Das PV-Profil als Pandas-Serie.
+    """
+
     # Umgebung (Timer, Wetter, Preise)
 
 
@@ -97,16 +138,16 @@ def create_pv(env, peakpower, index, beta, gamma, area=10.0, eta_noct=0.15, meth
 
 
 
-def create_hp(index, env, hp_params=None, flow_temp=None, schedule= None):
+def create_hp(index: pd.Index, env: Environment, hp_params=None, flow_temp=None, schedule= None) -> pd.Series:
     """
     Erzeugt ein Wärmepumpen-Profil.
 
     Args:
         index: Zeitstempel für das Wärmepumpen-Profil
+        env: Environment-Objekt
         hp_params: Parameter für die Wärmepumpe (optional)
         flow_temp: Vorlauftemperatur (optional, Standardwert wird verwendet)
         schedule: Betriebsprofil der Wärmepumpe (optional, Standardwert wird verwendet)
-        env: Environment-Objekt (optional, falls benötigt)
 
     Returns:
         power_series: Pandas-Serie mit der elektrischen Leistung der Wärmepumpe in kW

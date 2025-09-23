@@ -4,7 +4,19 @@ from tqdm import tqdm
 import pypsa
 
 
-def create_grid(bbox, grids_dir):
+def create_grid(bbox: list[float], grids_dir: str) -> pypsa.Network:
+    """
+    Erstellt ein PyPSA-Netzwerk basierend auf den Bus-Koordinaten innerhalb eines gegebenen Rechtecks (bbox).
+    
+    Args:
+        bbox (list[float]): Liste mit den Koordinaten [xmin, ymin, xmax, ymax].
+        grids_dir (str): Verzeichnis, das die Unterordner mit den Netzwerken enthält.
+        
+    Returns:
+        pypsa.Network: Das gefilterte PyPSA-Netzwerk.
+    """
+
+
     xmin, ymin, xmax, ymax = bbox  # aus bbox auspacken
     # Ergebnisliste
     found_buses = []

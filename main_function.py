@@ -13,8 +13,12 @@ from pycity_base.classes.weather import Weather
 from pycity_base.classes.prices import Prices
 from pycity_base.classes.environment import Environment
 
+# import für typehints
+import pypsa
+import geopandas as gpd
 
-def daten_laden(ordner):
+
+def daten_laden(ordner: str) -> pd.DataFrame:
     """
     Lädt Zensusdaten aus CSV-Dateien in einem angegebenen Ordner und gibt sie als DataFrame zurück.
     
@@ -50,7 +54,7 @@ def daten_laden(ordner):
     return daten
 
 
-def ding0_grid(bbox, grids_dir, output_file_grid):
+def ding0_grid(bbox: list[float], grids_dir: str, output_file_grid: str) -> tuple[ding0.Grid, list[float]]:
     """
     Erstellt ein Grid-Objekt basierend auf den gegebenen Bounding Box-Koordinaten und speichert es in einer NetCDF-Datei.
     
@@ -78,7 +82,7 @@ def ding0_grid(bbox, grids_dir, output_file_grid):
     return grid, bbox_neu
 
 
-def osm_data(net, buses_df, bbox_neu, buffer):
+def osm_data(net: pypsa.Network, buses_df: pd.DataFrame, bbox_neu: list[float], buffer: float) -> tuple[pd.DataFrame, gpd.GeoDataFrame]:
     """
     Ruft OSM-Daten für die gegebene Bounding Box ab und gibt sie zurück.
 
@@ -106,7 +110,7 @@ def osm_data(net, buses_df, bbox_neu, buffer):
     return buses_df, Area, Area_features
 
 
-def daten_zuordnung(buses, bundesland_data, ordner):
+def daten_zuordnung(buses: pd.DataFrame, bundesland_data: pd.DataFrame, ordner: str) -> pd.DataFrame:
     """
     Weist den Bussen im Netzwerk Bundesland- und Zensusdaten zu.
     
@@ -137,7 +141,7 @@ def daten_zuordnung(buses, bundesland_data, ordner):
 
 
 
-def bundesland_zensus(ordner, datei, bundesland):
+def bundesland_zensus(ordner: str, datei: str, bundesland: str) -> pd.DataFrame:
     """
     Lädt die Bundesland-Daten aus einer GeoJSON-Datei und ordnet sie den Zensusdaten zu.
     
@@ -165,7 +169,23 @@ def bundesland_zensus(ordner, datei, bundesland):
 
 
 
-def technik_zuordnen(buses, file_Faktoren, file_solar, file_ecar, file_hp, technik_arr):
+def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, file_ecar: str, file_hp: str, technik_arr: list[str]) -> tuple[pd.DataFrame, list[float]]:
+    """
+    Ordnet den Bussen im Netzwerk verschiedene Techniken basierend auf Zensus- und Bevölkerungsdaten zu.
+    
+    Args:
+        buses (pd.DataFrame): DataFrame mit den Busdaten.
+        file_Faktoren (str): Pfad zur CSV-Datei mit den Technik-Faktoren.
+        file_solar (str): Pfad zur CSV-Datei mit den Solar-Bevölkerungsdaten.
+        file_ecar (str): Pfad zur CSV-Datei mit den E-Car-Bevölkerungsdaten.
+        file_hp (str): Pfad zur CSV-Datei mit den Wärmepumpen-Bevölkerungsdaten.
+        technik_arr (list[str]): Liste der Techniken, die zugeordnet werden sollen.
+    
+    Returns:
+        tuple: Ein Tupel bestehend aus dem aktualisierten DataFrame mit den Busdaten und einer Liste der berechneten Faktoren für jede Technik.
+    """
+    
+    
     Technik_Faktoren = pd.read_csv(file_Faktoren, sep=";")
     Technik_Faktoren = Technik_Faktoren.set_index("Technik")
 
@@ -228,7 +248,7 @@ def technik_zuordnen(buses, file_Faktoren, file_solar, file_ecar, file_hp, techn
 
 
 
-def technik_fill(buses, Technik, p_total):
+def technik_fill(buses: pd.DataFrame, Technik: list[str], p_total: list[float]) -> pd.DataFrame:
     """
     Füllt das Grid-Objekt mit den Techniken basierend auf den gegebenen Anteilen.
     
@@ -258,7 +278,20 @@ def technik_fill(buses, Technik, p_total):
 
 
 
-def loads_zuordnen(grid, buses, bbox, env=None):
+def loads_zuordnen(grid: pd.DataFrame, buses: pd.DataFrame, bbox: pd.DataFrame, env=None) -> pypsa.Network:
+    """
+    Fügt dem PyPSA-Netzwerk Lasten, Solargeneratoren und Wärmepumpen basierend auf den Busdaten hinzu.
+    
+    Args:
+        grid (pypsa.Network): Das PyPSA-Netzwerk, dem die Lasten und Generatoren hinzugefügt werden sollen.
+        buses (pd.DataFrame): DataFrame mit den Busdaten.
+        bbox (list): Liste mit den Koordinaten der Bounding Box in der Form [left, bottom, right, top].
+        env (Environment, optional): Die Umgebung, die für die Last- und Generatorerstellung verwendet wird. Wenn None, wird eine neue Umgebung erstellt.
+        
+    Returns:
+        pypsa.Network: Das aktualisierte PyPSA-Netzwerk mit den hinzugefügten Lasten und Generatoren.
+    """
+
     if env is None:
         environment = func.env_wetter(bbox)
     else:
@@ -414,7 +447,17 @@ def loads_zuordnen(grid, buses, bbox, env=None):
     
     return grid
 
-def pypsa_vorbereiten(grid):
+def pypsa_vorbereiten(grid: pypsa.Network) -> pypsa.Network:
+    """
+    Bereitet das PyPSA-Netzwerk vor, indem es Kosten und Eigenschaften für verschiedene Komponenten setzt.
+
+    Args:
+        grid (pypsa.Network): Das PyPSA-Netzwerk, das vorbereitet werden soll.
+
+    Returns:
+        pypsa.Network: Das vorbereitete PyPSA-Netzwerk.
+    """
+
 
     # Kosten für Solaranlagen müssen wahrscheinlich allgemein gesetzt werden
 

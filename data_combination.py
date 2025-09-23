@@ -5,11 +5,19 @@ import geopandas as gpd
 from shapely.geometry import Point
 import networkx as nx
 
+# Import Für TypeHints
+import pypsa
 
-def generator_duplikate_zusammenfassen(grid):
+
+def generator_duplikate_zusammenfassen(grid:pypsa.Network) -> pypsa.Network:
     """
     Fasst Generatoren am gleichen Bus mit gleichem Typ (carrier) zusammen.
     Addiert p_nom und ersetzt Mehrfacheinträge durch einen einzigen.
+
+    Args:
+        grid (pypsa.Network): Das PyPSA-Netzwerk mit möglichen Duplikaten.
+    Returns:
+        pypsa.Network: Das bereinigte PyPSA-Netzwerk ohne Duplikate.
     """
     gens = grid.generators
 
@@ -38,7 +46,19 @@ def generator_duplikate_zusammenfassen(grid):
 
     return grid
 
-def data_combination(ding0, buses_df, osm):
+def data_combination(ding0: pypsa.Network, buses_df: pd.DataFrame, osm: gpd.GeoDataFrame) -> pd.DataFrame:
+    """
+    Kombiniert die Daten aus dem Ding0 Grid mit den OSM-Daten.
+    Ordnet die Generatoren den Bussen zu und matched die End-Busse mit OSM-Nodes.
+    
+    Args:
+        ding0 (pypsa.Network): Das Ding0 Netz.
+        buses_df (pd.DataFrame): DataFrame mit den Bus-Daten.
+        osm (gpd.GeoDataFrame): GeoDataFrame mit den OSM-Daten.
+
+    Returns:
+        pd.DataFrame: DataFrame mit den kombinierten Daten.
+    """
 
     # Doppeltte Generatoren werden zu einem zusammengefasst
     ding0 = generator_duplikate_zusammenfassen(ding0)

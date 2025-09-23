@@ -32,7 +32,7 @@ grids_dir = "input/grids"
 grid_1, bbox_1 = mf.ding0_grid(bbox, grids_dir, output_file_grid)
 
 # DataFrame für alle Daten erstellen
-buses_df = grid_1.buses
+buses_df = grid_1.buses.copy()
 
 """
 Check durch PLOT

@@ -24,12 +24,15 @@ from pycity_base.classes.weather import Weather
 from pycity_base.classes.prices import Prices
 from pycity_base.classes.environment import Environment
 
+# Import für TypeHints
+import pypsa
+
 #%% Funktionen zum aufrufen
 
 
 #%% Funktionen zum aufrufen
 
-def get_osm_data(bbox):
+def get_osm_data(bbox: list) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Ruft OSM-Daten für die gegebene Bounding Box ab und gibt sie zurück.
 
@@ -79,7 +82,7 @@ def get_osm_data(bbox):
     return Area, Area_features
 
 
-def compute_bbox_from_buses(net):
+def compute_bbox_from_buses(net: pypsa.Network) -> list[float]:
     """
     Compute the bounding box from the bus coordinates in a PyPSA network.
 
@@ -99,7 +102,7 @@ def compute_bbox_from_buses(net):
     return bbox
 
 
-def bundesland(net_buses, data):
+def bundesland(net_buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
     """
     Weist den Bussen im Netzwerk Bundesland-Daten zu.
 
@@ -135,7 +138,17 @@ def bundesland(net_buses, data):
     return net_buses
 
 
-def zensus_ID(buses_df, ordner):
+def zensus_ID(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
+    """
+    Ordnet den Bussen im Netzwerk die GITTER_ID_100m aus den Zensusdaten zu.
+    
+    Args:
+        buses_df (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
+        ordner (str): Der Pfad zum Ordner, der die Zensusdaten im CSV-Format enthält.
+
+    Returns:
+        pd.DataFrame: DataFrame mit den zugeordneten GITTER_ID_100m.
+    """
 
     zensus = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
 
@@ -162,7 +175,7 @@ def zensus_ID(buses_df, ordner):
     return buses
 
 
-def zensus_laden(buses_df, ordner):
+def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
     """
     Lädt Zensusdaten aus CSV-Dateien in einem angegebenen Ordner und gibt sie als DataFrame zurück.
     
@@ -289,7 +302,7 @@ def zensus_laden(buses_df, ordner):
     return buses_df
 
 
-def epsg4326_zu_epsg3035(lon, lat):
+def epsg4326_zu_epsg3035(lon: float, lat: float) -> tuple[float, float] :
     """
     Umrechnung von WGS84 (EPSG:4326) zu ETRS89 (EPSG:3035)
 
@@ -305,7 +318,7 @@ def epsg4326_zu_epsg3035(lon, lat):
     rechtswert, hochwert = transformer_zu_EPSG3035.transform(lon, lat)
     return rechtswert, hochwert
 
-def epsg32632_zu_epsg3035(lon, lat):
+def epsg32632_zu_epsg3035(lon: float, lat: float) -> tuple[float, float]:
     """
     Umrechnung von WGS84 (EPSG:32632) zu ETRS89 (EPSG:3035)
     Args:
@@ -321,7 +334,7 @@ def epsg32632_zu_epsg3035(lon, lat):
     return rechtswert, hochwert
 
 
-def zensus_df_verbinden(daten_zensus):
+def zensus_df_verbinden(daten_zensus: list) -> pd.DataFrame:
     """
     Verbindet mehrere DataFrames basierend auf der GITTER_ID_100m Spalte.
     
@@ -343,7 +356,7 @@ def zensus_df_verbinden(daten_zensus):
 
 
 
-def daten_zuordnen(net_buses, data):
+def daten_zuordnen(net_buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
     """
     Ordnet die Zensusdaten den Bussen im Netzwerk zu, basierend auf den Koordinaten.
     
@@ -383,7 +396,7 @@ def daten_zuordnen(net_buses, data):
 
 
 
-def load_shapes(datei, bundesland):
+def load_shapes(datei: str, bundesland: str) -> gpd.GeoDataFrame:
     """
     Lädt die Bundesland-Geometrien aus einer GeoJSON-Datei und filtert sie auf die relevanten Bundesländer.
     Args:
@@ -433,7 +446,7 @@ def load_shapes(datei, bundesland):
 
 
 
-def bundesland_zuordnung(ordner, shapes):
+def bundesland_zuordnung(ordner: str, shapes: gpd.GeoDataFrame) -> pd.DataFrame:
     """
     Ordnet die Zensusdaten den Bundesländern zu, basierend auf den Geometrien der Bundesländer.
     Args:
@@ -461,7 +474,18 @@ def bundesland_zuordnung(ordner, shapes):
 
 
 
-def bundesland_summieren(df, bundesland):
+def bundesland_summieren(df: pd.DataFrame, bundesland: str) -> pd.DataFrame:
+    """
+    Summiert die Zensusdaten für ein bestimmtes Bundesland.
+    
+    Args:
+        df (pd.DataFrame): DataFrame mit den Zensusdaten.
+        bundesland (str): Der Name des Bundeslands, für das die Daten summiert werden
+        
+    Returns:
+        pd.DataFrame: Ein DataFrame mit den summierten Zensusdaten für das Bundesland
+    """
+
     
     numerische_spalten = [col for col in df.columns if col.startswith("Zensus")]
 
@@ -481,7 +505,7 @@ def bundesland_summieren(df, bundesland):
     return df_neu
 
 
-def gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_faktoren, gesamtgewicht_dict):
+def gewichtungsfaktor(land: str, kategorien_eigenschaften: pd.DataFrame, factors: dict, row: pd.Series, technik_faktoren: pd.Series, gesamtgewicht_dict: dict) -> float:
     """
     Berechnet den Gewichtungsfaktor für eine bestimmte Technik und ein bestimmtes Land basierend auf den Eigenschaften und Faktoren.
     
@@ -524,7 +548,7 @@ def gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_fakt
 
 
 
-def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
+def calculate_factors(df: pd.DataFrame, factors: dict, kategorien_eigenschaften: pd.DataFrame, Bev_data: pd.DataFrame, technik: str) -> pd.DataFrame:
 
     """
     Berechnet den Faktor für jede Zeile im DataFrame basierend auf den Eigenschaften und Bevölkerungsdaten.
@@ -578,7 +602,17 @@ def calculate_factors(df, factors, kategorien_eigenschaften, Bev_data, technik):
 
 
 
-def raster_5_id(net_buses):
+def raster_5_id(net_buses: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ordnet den Bussen im Netzwerk die ID_5km aus den 5km Rasterdaten zu.
+    
+    Args:
+        net_buses (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
+        
+    Returns:
+        pd.DataFrame: DataFrame mit den zugeordneten ID_5km.
+    """
+
 
     data = gpd.read_file("input/FZ_Pkw_mit_Elektro_Antrieb_Regionen_Gitterzellen2024_6922366346781309644.geojson")
 
@@ -593,7 +627,25 @@ def raster_5_id(net_buses):
     return id
 
 
-def faktoren(buses_zensus, Technik_Faktoren, Bev_data, bbox_zensus, technik, id_df):
+def faktoren(buses_zensus: pd.DataFrame, Technik_Faktoren: pd.DataFrame, Bev_data: pd.DataFrame, bbox_zensus: pd.Series, technik: str, id_df: pd.Series) -> tuple[pd.Series, float]:
+        """
+        Berechnet die Faktoren für die Busse und das Bounding Box basierend auf den Zensusdaten und Bevölkerungsdaten.
+        
+        Args:
+            buses_zensus (pd.DataFrame): DataFrame mit den Zensusdaten der Busse.
+            Technik_Faktoren (pd.DataFrame): DataFrame mit den Technik-Faktoren.
+            Bev_data (pd.DataFrame): DataFrame mit den Bevölkerungsdaten.
+            bbox_zensus (pd.Series): Serie mit den Zensusdaten der Bounding Box.
+            technik (str): Die Technik, für die die Faktoren berechnet werden.
+            id_df (pd.Series): Serie mit den IDs der Busse.
+
+        Returns:
+            tuple: Ein Tupel mit zwei Elementen:
+                - pd.Series: Serie mit den berechneten Faktoren für die Busse.
+                - float: Der berechnete Faktor für die Bounding Box.
+        """
+
+
         arr_factor = pd.Series(0.0, index=buses_zensus.index)
         #land = buses_land.iloc[0, 0]
         Bev_data_Zensus = Bev_data[[col for col in Bev_data.columns if col.startswith("Zensus")]].copy()
@@ -622,7 +674,7 @@ def faktoren(buses_zensus, Technik_Faktoren, Bev_data, bbox_zensus, technik, id_
         
 
 
-def technik_sortieren(buses, Technik, p_total, solar_power):
+def technik_sortieren(buses: pd.DataFrame, Technik: str, p_total: float, solar_power: float) -> pd.DataFrame:
     """
     Sortiert die Busse nach der Technik und verteilt die Leistung gleichmäßig auf die Busse
     
@@ -704,7 +756,20 @@ def technik_sortieren(buses, Technik, p_total, solar_power):
     return buses
 
 
-def solar_ausrichtung(buses, plz, pv_plz):
+def solar_ausrichtung(buses: pd.DataFrame, plz: str, pv_plz: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fügt den Bussen mit Solartechnik die Ausrichtung und Neigung basierend auf den PLZ-Daten hinzu.
+    
+    Args:
+        buses (pd.DataFrame): DataFrame mit den Busdaten, das die Spalte 'Power_solar' enthält.
+        plz (str): Die Postleitzahl, für die die Ausrichtung und Neigung zugeordnet werden soll.
+        pv_plz (pd.DataFrame): DataFrame mit den PLZ-Daten, das die Spalten 'Hauptausrichtung_Anteil' und 'HauptausrichtungNeigungswinkel_Anteil' enthält.
+        
+    Returns:
+        pd.DataFrame: DataFrame mit den neuen Spalten 'Hauptausrichtung_Anteil' und 'HauptausrichtungNeigungswinkel_Anteil' für die Busse mit Solartechnik.
+    """
+
+
     # Ausrichtung und Neigung für PV
     ausrichtung = ast.literal_eval(pv_plz.loc[plz, 'Hauptausrichtung_Anteil'])
     neigung = ast.literal_eval(pv_plz.loc[plz, 'HauptausrichtungNeigungswinkel_Anteil'])
@@ -735,7 +800,7 @@ def solar_ausrichtung(buses, plz, pv_plz):
     return buses
 
 
-def storage(buses, storage_pv):
+def storage(buses: pd.DataFrame, storage_pv: float) -> pd.DataFrame:
     """
     Fügt eine Spalte 'speicher' zu den Bussen hinzu, die den Speicherbedarf für Solarenergie berechnet.
     
@@ -747,7 +812,7 @@ def storage(buses, storage_pv):
     """
     
     '''
-    Prob kann noch mit Martstammdatenregister angepasst werden. Verhältnis für jede PLZ bestimmen
+    Prob folgt aus Marktstammdatenregister:
     '''
     prob = storage_pv 
     
@@ -764,7 +829,18 @@ def storage(buses, storage_pv):
 
 
 
-def relative_humidity(t, td):
+def relative_humidity(t: float, td: float) -> float:
+    """
+    Berechnet die relative Luftfeuchtigkeit basierend auf der Temperatur und dem Taupunkt.
+    
+    Args:
+        t (float): Die Temperatur in Grad Celsius.
+        td (float): Der Taupunkt in Grad Celsius.
+        
+    Returns:
+        float: Die relative Luftfeuchtigkeit in Prozent.
+    """
+
     # t und td in °C
     es = 6.112 * np.exp((17.67 * t) / (t + 243.5))  # Sättigungsdampfdruck
     e = 6.112 * np.exp((17.67 * td) / (td + 243.5)) # Dampfdruck
@@ -772,7 +848,22 @@ def relative_humidity(t, td):
     return rh
 
 
-def env_wetter(bbox, time_discretization=3600, timesteps_horizon=8760, timesteps_used_horizon=8760, timesteps_total=8760): #, year):
+def env_wetter(bbox: list, time_discretization: int = 3600, timesteps_horizon: int = 8760, timesteps_used_horizon: int = 8760, timesteps_total: int = 8760) -> Environment: #, year):
+    """
+    Lädt Wetterdaten von ERA5 für eine gegebene Bounding Box und berechnet relevante Umweltparameter.
+    
+    Args:
+        bbox (list): Liste mit den Koordinaten der Bounding Box im Format [W, S, E, N].
+        time_discretization (int): Zeitdiskretisierung in Sekunden (Standard: 3600 Sekunden = 1 Stunde).
+        timesteps_horizon (int): Anzahl der Zeitschritte im Planungshorizont (Standard: 8760 für ein Jahr).
+        timesteps_used_horizon (int): Anzahl der Zeitschritte, die tatsächlich verwendet werden (Standard: 8760 für ein Jahr).
+        timesteps_total (int): Gesamtanzahl der Zeitschritte (Standard: 8760 für ein Jahr).
+        year (int): Jahr der Wetterdaten (z.B. 2013).
+        
+    Returns:
+        Environment: Ein Environment-Objekt mit den geladenen Wetterdaten und berechneten Parametern.
+    """
+
 
     # Definierung der gebrauchten Tabellen
     variables = [
