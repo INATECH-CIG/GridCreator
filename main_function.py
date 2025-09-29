@@ -16,6 +16,7 @@ from pycity_base.classes.environment import Environment
 # import für typehints
 import pypsa
 import geopandas as gpd
+import pypsa
 
 
 def daten_laden(ordner: str) -> pd.DataFrame:
@@ -54,7 +55,7 @@ def daten_laden(ordner: str) -> pd.DataFrame:
     return daten
 
 
-def ding0_grid(bbox: list[float], grids_dir: str, output_file_grid: str) -> tuple[ding0.Grid, list[float]]:
+def ding0_grid(bbox: list[float], grids_dir: str, output_file_grid: str) -> tuple[pypsa.Network, list[float]]:
     """
     Erstellt ein Grid-Objekt basierend auf den gegebenen Bounding Box-Koordinaten und speichert es in einer NetCDF-Datei.
     
@@ -195,7 +196,8 @@ def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, f
 
 
     Bev_data_ecar = pd.read_csv(file_ecar, sep=",")
-    Bev_data_ecar.set_index("id_5km", inplace=True)
+    Bev_data_ecar["Schluessel_Zulbz"] = Bev_data_ecar["Schluessel_Zulbz"].astype(int).astype(str).str.zfill(5)
+    Bev_data_ecar.set_index("Schluessel_Zulbz", inplace=True)
 
 
     Bev_data_hp = pd.read_csv(file_hp, sep=",")
@@ -215,9 +217,7 @@ def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, f
     
     # Berechnung Solar
     if 'solar' in technik_arr:
-        buses_plz = buses['plz_code'].copy().to_frame()
-        # buses_plz.reset_index(drop=True, inplace=True)
-        print(buses_plz)
+        buses_plz = buses['plz_code'].copy()
         technik = 'solar'
         i = technik_arr.index(technik)
         buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_solar, bbox_zensus, 'solar', buses_plz)
@@ -229,16 +229,16 @@ def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, f
     Die ID muss den buses noch hinzugefügt werden
     '''
     if 'E_car' in technik_arr:
-        buses_5km = func.raster_5_id(buses)
+        buses_zulassung = func.zulassung(buses)
         technik = 'E_car'
         i = technik_arr.index(technik)
-        buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_ecar, bbox_zensus, 'E_car', buses_5km)
+        buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_ecar, bbox_zensus, 'E_car', buses_zulassung)
 
 
 
     # Berechnung HP
     if 'HP' in technik_arr:
-        buses_land = buses['lan_name'].copy().to_frame()
+        buses_land = buses['lan_name'].copy()
         technik = 'HP'
         i = technik_arr.index(technik)
         buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_hp, bbox_zensus, 'HP', buses_land)

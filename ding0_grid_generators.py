@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-def extract_lv_subnetwork_to_nearest_transformers(start_buses: pd.DataFrame, grids_dir: str) -> pypsa.Network:
+def extract_lv_subnetwork_to_nearest_transformers(start_buses: pd.DataFrame, path: str) -> pypsa.Network:
     """
     Extrahiert das Niederspannungs-Teilnetz, das die angegebenen Start-Busse
     mit den nächstgelegenen Niederspannungs-Transformatoren verbindet.
@@ -48,8 +48,7 @@ def extract_lv_subnetwork_to_nearest_transformers(start_buses: pd.DataFrame, gri
         return shortest_path
 
     # Netzwerk laden
-    grid_id = str(start_buses["mv_grid_id"].iloc[0])
-    network_path = os.path.join(grids_dir, grid_id, "topology")
+    network_path = path
     net = pypsa.Network(network_path)
 
     # LV-only Graph aufbauen (nur für Pfadsuche!)
@@ -152,14 +151,16 @@ def load_buses_in_bbox(bbox: tuple, base_path: str) -> pd.DataFrame:
 
                     if not buses_filtered.empty:
                         all_buses.append(buses_filtered)
+                        path = topology_path
 
             except Exception as e:
                 print(f"Fehler beim Einlesen von {buses_file}: {e}")
 
     if all_buses:
-        return pd.concat(all_buses, ignore_index=True)
+        return pd.concat(all_buses, ignore_index=True), path
     else:
-        return pd.DataFrame()  # Leerer DataFrame, wenn nichts gefunden
+        print("Keine Busse innerhalb der BBOX gefunden.")
+        return pd.DataFrame(), None  # Leerer DataFrame und None, wenn nichts gefunden
 
 
 
@@ -177,6 +178,10 @@ def load_grid(bbox: tuple, grids_dir: str) -> pypsa.Network:
         pypsa.Network: Das extrahierte Niederspannungs-Teilnetz.
     """
     
-    filtered_buses = load_buses_in_bbox(bbox, grids_dir)
-    grid = extract_lv_subnetwork_to_nearest_transformers(filtered_buses, grids_dir)
+    filtered_buses, path = load_buses_in_bbox(bbox, grids_dir)
+    if not filtered_buses.empty:
+        grid = extract_lv_subnetwork_to_nearest_transformers(filtered_buses, path)
+    else:
+        print("Keine Busse innerhalb der BBOX gefunden.")
+        grid = pypsa.Network()  # Leeres Netz zurückgeben, wenn keine Busse gefunden wurden
     return grid

@@ -602,7 +602,7 @@ def calculate_factors(df: pd.DataFrame, factors: dict, kategorien_eigenschaften:
 
 
 
-def raster_5_id(net_buses: pd.DataFrame) -> pd.DataFrame:
+def zulassung(net_buses: pd.DataFrame) -> pd.DataFrame:
     """
     Ordnet den Bussen im Netzwerk die ID_5km aus den 5km Rasterdaten zu.
     
@@ -614,15 +614,18 @@ def raster_5_id(net_buses: pd.DataFrame) -> pd.DataFrame:
     """
 
 
-    data = gpd.read_file("input/FZ_Pkw_mit_Elektro_Antrieb_Regionen_Gitterzellen2024_6922366346781309644.geojson")
+    data = gpd.read_file("input/FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson")
 
     # Bus Koordinaten in GeoDataFrame umwandeln
     gdf_buses = gpd.GeoDataFrame(net_buses.copy(), geometry=gpd.points_from_xy(net_buses["x"], net_buses["y"]), crs=data.crs)
 
     # Shape, Punkt Join
-    gdf_joined = gpd.sjoin(gdf_buses, data[["id_5km", "geometry"]], how="left", predicate="within")
+    gdf_joined = gpd.sjoin(gdf_buses, data[["Schluessel_Zulbz", "geometry"]], how="left", predicate="within")
+    print("gdf_joined:", gdf_joined)
+    # Duplikate droppen
+    gdf_joined = gdf_joined[~gdf_joined.index.duplicated(keep='first')]
     # ID filtern für jeden Bus
-    id = gdf_joined["id_5km"].copy()
+    id = gdf_joined["Schluessel_Zulbz"].copy()
 
     return id
 
@@ -660,15 +663,10 @@ def faktoren(buses_zensus: pd.DataFrame, Technik_Faktoren: pd.DataFrame, Bev_dat
         id = id_df.iloc[0]
         factor_area = Bev_data_Zensus.loc[id] @ Technik_Faktoren.loc[technik]
         for j, zensus in buses_zensus.iterrows():
-            print(id_df)
             id = id_df.loc[j]
-            print('zensus:', zensus)
-            print('Technik_Faktoren.loc[technik]:', Technik_Faktoren.loc[technik])
             factor_bus = zensus @ Technik_Faktoren.loc[technik]
-            # # Für jeden bus einzeln das Bundesland bestimmen ?
-            # land = buses_land.iloc[j, 0]
-            # factor_land = Bev_data_Zensus.loc[land] @ factors[technik]
             arr_factor.loc[j] = factor_bus / factor_area * Bev_data_Technik.loc[id]
+
         factor_bbox = bbox_zensus @ Technik_Faktoren.loc[technik] / factor_area * Bev_data_Technik.loc[id]
         return arr_factor, factor_bbox
         
@@ -692,7 +690,7 @@ def technik_sortieren(buses: pd.DataFrame, Technik: str, p_total: float, solar_p
     buses['Power_' + Technik] = 0.0  # Initialisierung mit 0
 
 
-    if Technik == 'solar':
+    if Technik == 'solar' and "type_1" in buses.columns:
         # power und gesamtzahl von Technik in bbox
         mask_type1 = buses["type_1"] == Technik
         p_bbox = buses.loc[mask_type1, "p_nom_1"].sum(min_count=1)
