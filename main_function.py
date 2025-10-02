@@ -14,9 +14,9 @@ from pycity_base.classes.prices import Prices
 from pycity_base.classes.environment import Environment
 
 # import für typehints
+from typing import List, Tuple
 import pypsa
 import geopandas as gpd
-import pypsa
 
 
 def daten_laden(ordner: str) -> pd.DataFrame:
@@ -83,7 +83,7 @@ def ding0_grid(bbox: list[float], grids_dir: str, output_file_grid: str) -> tupl
     return grid, bbox_neu
 
 
-def osm_data(net: pypsa.Network, buses_df: pd.DataFrame, bbox_neu: list[float], buffer: float) -> tuple[pd.DataFrame, gpd.GeoDataFrame]:
+def osm_data(net: pypsa.Network, bbox_neu: list[float], buffer: float) -> tuple[pd.DataFrame, gpd.GeoDataFrame]:
     """
     Ruft OSM-Daten für die gegebene Bounding Box ab und gibt sie zurück.
 
@@ -106,7 +106,7 @@ def osm_data(net: pypsa.Network, buses_df: pd.DataFrame, bbox_neu: list[float], 
     Area_features_df = Area_features.reset_index()
 
     # Daten kombinieren
-    buses_df = dc.data_combination(net, buses_df, Area_features_df)
+    buses_df = dc.data_combination(net, Area_features_df)
 
     return buses_df, Area, Area_features
 
@@ -211,7 +211,20 @@ def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, f
     buses_zensus = (buses_zensus.astype(str).replace(",", ".", regex=True).apply(pd.to_numeric, errors="coerce").fillna(0.0))
     bbox_zensus = buses_zensus.agg(agg_dict)
 
-    
+    # bbox Faktor folgt nur aus erster Zeile von jeder Gruppe
+    # Nach Gitter-ID gruppieren
+    buses_zensus['GITTER_ID_100m'] = buses['GITTER_ID_100m']
+    buses_zensus_grouped = buses_zensus.groupby(['GITTER_ID_100m'])
+
+    bbox_zensus_df = pd.DataFrame()
+    for name, group in buses_zensus_grouped:
+        df = group.iloc[[0]].copy()
+        bbox_zensus_df = pd.concat([bbox_zensus_df, df])
+
+    bbox_zensus = bbox_zensus_df.agg(agg_dict)
+
+    # Gitter ID löschen
+    buses_zensus.drop(columns=['GITTER_ID_100m'], inplace=True)
 
     factor_bbox = np.array([0.0] * len(technik_arr))
     
@@ -248,6 +261,266 @@ def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, f
 
 
 
+def wohnungen_zuordnen(buses):
+        
+
+    # Neue Spalten erstellen für Haustypen
+    buses['Bus_1_Wohnung'] = 0
+    buses['Bus_2_Wohnungen'] = 0
+    buses['Bus_3bis6_Wohnungen'] = 0
+    buses['Bus_7bis12_Wohnungen'] = 0
+    buses['Bus_13undmehr_Wohnungen'] = 0
+    buses['Bus_1_Person'] = 0
+    buses['Bus_2_Personen'] = 0
+    buses['Bus_3_Personen'] = 0
+    buses['Bus_4_Personen'] = 0
+    buses['Bus_5_Personen'] = 0
+    buses['Bus_6_Personen_und_mehr'] = 0
+    buses['Haushalte'] = 0
+    buses['Bewohnerinnen'] = 0
+
+    # gruppieren nach GITER_ID_100m
+    buses = buses.fillna(0)
+    buses = buses.replace("–", 0)
+    buses_grouped = buses.groupby('GITTER_ID_100m')
+    # Haustypverteilung berechnen
+
+
+    for name, group in buses_grouped:
+
+        print('GITTER_ID_100m: ', name)
+        print('Gruppe, ', group.index)
+
+        node_anzahl = len(group)
+        wohnungs_anzahl = sum([float(group.iloc[0]['Zensus_1_Wohnung']),
+                        float(group.iloc[0]['Zensus_2_Wohnungen']),
+                        float(group.iloc[0]['Zensus_3bis6_Wohnungen']),
+                        float(group.iloc[0]['Zensus_7bis12_Wohnungen']),
+                        float(group.iloc[0]['Zensus_13undmehr_Wohnungen'])])
+        print('wohnungs_anzahl, ', wohnungs_anzahl)
+        if wohnungs_anzahl == 0:
+
+            '''
+            Wenn keine Angaben da sind, werden die Bewohnerinnen gleichmäßig aufgeteilt
+            '''
+
+            bew_pro_node = int(group.iloc[0]['Zensus_Einwohner']) / node_anzahl
+            print('bew_pro_node, ', bew_pro_node)
+            for i in group.index:
+                buses.at[i, 'Bewohnerinnen'] = bew_pro_node
+            
+            print('Nächste Gruppe')
+            continue
+            
+
+        else:
+
+            '''
+            Wenn Angaben da sind, werden die Bewohnerinnen anteilig aufgeteilt
+            Ablauf:
+            1. Wohnungsgrößenanteile bestimmen
+            2. Jedem Bus eine Wohnungsanzahl zuweisen
+            3. Liste mit den Index der Busse erstellen, je nach Wohnungsanzahl
+            4. Personenanteile bestimmen
+            5. Personen auf Wohnungen anteilig verteilen, bis Einwohnerzahl erreicht ist
+            '''
+
+            
+            group = group.replace("–", 0)
+            typ1_anteil = float(group.iloc[0]['Zensus_1_Wohnung']) / wohnungs_anzahl
+            typ2_anteil = float(group.iloc[0]['Zensus_2_Wohnungen']) / wohnungs_anzahl
+            typ3_anteil = float(group.iloc[0]['Zensus_3bis6_Wohnungen']) / wohnungs_anzahl
+            typ4_anteil = float(group.iloc[0]['Zensus_7bis12_Wohnungen']) / wohnungs_anzahl
+            typ5_anteil = float(group.iloc[0]['Zensus_13undmehr_Wohnungen']) / wohnungs_anzahl
+            print('typ1_anteil, ', typ1_anteil)
+            print('typ2_anteil, ', typ2_anteil)
+            print('typ3_anteil, ', typ3_anteil)
+            print('typ4_anteil, ', typ4_anteil)
+            print('typ5_anteil, ', typ5_anteil)
+
+            # jeden bus zufällig einen Haustypen zuweisen
+            # Haustyp dabei je nach Anteil verteilen
+            for i in group.index:
+                print('i, ', i)
+                random_value = np.random.rand()
+                print('random_value, ', random_value)
+                if random_value < typ1_anteil:
+                    buses.at[i, 'Bus_1_Wohnung'] = 1
+                    print('typ1_anteil, ', typ1_anteil)
+                    print('typ1')
+                elif random_value < typ1_anteil + typ2_anteil:
+                    buses.at[i, 'Bus_2_Wohnungen'] = 1
+                    print('typ1_anteil + typ2_anteil, ', typ1_anteil + typ2_anteil)
+                    print('typ2')
+                elif random_value < typ1_anteil + typ2_anteil + typ3_anteil:
+                    buses.at[i, 'Bus_3bis6_Wohnungen'] = 1
+                    print('typ1_anteil + typ2_anteil + typ3_anteil, ', typ1_anteil + typ2_anteil + typ3_anteil)
+                    print('typ3')
+                elif random_value < typ1_anteil + typ2_anteil + typ3_anteil + typ4_anteil:
+                    buses.at[i, 'Bus_7bis12_Wohnungen'] = 1
+                    print('typ1_anteil + typ2_anteil + typ3_anteil + typ4_anteil, ', typ1_anteil + typ2_anteil + typ3_anteil + typ4_anteil)
+                    print('typ4')
+                else:
+                    buses.at[i, 'Bus_13undmehr_Wohnungen'] = 1
+                    print('typ1_anteil + typ2_anteil + typ3_anteil + typ4_anteil + typ5_anteil, ', typ1_anteil + typ2_anteil + typ3_anteil + typ4_anteil + typ5_anteil)
+                    print('typ5')
+
+            print('Fertig mit den Wohnungen')
+            # liste mit den index der buse erstellen
+            # wenn typ1_ = 1 dann einmal in der liste, type2 = 1, dann zweimal in der liste usw.
+            list = []
+
+            wohnungs_anzahl_verteilt = 0
+            for bus_index in group.index:
+                print('bus_index, ', bus_index)
+                if buses.at[bus_index, 'Bus_1_Wohnung'] == 1:
+                    print('1 Wohnung')
+                    list.extend([bus_index] * 1)
+                    buses.at[bus_index, 'Haushalte'] = 1
+                    buses.at[bus_index, 'Bewohnerinnen'] = 1
+                    wohnungs_anzahl_verteilt += 1
+                if buses.at[bus_index, 'Bus_2_Wohnungen'] == 1:
+                    print('2 Wohnungen')
+                    list.extend([bus_index] * 2)
+                    buses.at[bus_index, 'Haushalte'] = 2
+                    buses.at[bus_index, 'Bewohnerinnen'] = 2
+                    wohnungs_anzahl_verteilt += 2
+                
+                '''
+                Annahme der kleinsten Anzahl an Wohnungen
+                '''
+
+                if buses.at[bus_index, 'Bus_3bis6_Wohnungen'] == 1:
+                    print('3 bis 6 Wohnungen')
+                    list.extend([bus_index] * 3)
+                    buses.at[bus_index, 'Haushalte'] = 3
+                    buses.at[bus_index, 'Bewohnerinnen'] = 3
+                    wohnungs_anzahl_verteilt += 3
+                if buses.at[bus_index, 'Bus_7bis12_Wohnungen'] == 1:
+                    print('7 bis 12 Wohnungen')
+                    list.extend([bus_index] * 7)
+                    buses.at[bus_index, 'Haushalte'] = 7
+                    buses.at[bus_index, 'Bewohnerinnen'] = 7
+                    wohnungs_anzahl_verteilt += 7
+                if buses.at[bus_index, 'Bus_13undmehr_Wohnungen'] == 1:
+                    print('13 und mehr Wohnungen')
+                    list.extend([bus_index] * 13)
+                    buses.at[bus_index, 'Haushalte'] = 13
+                    buses.at[bus_index, 'Bewohnerinnen'] = 13
+                    wohnungs_anzahl_verteilt += 13
+
+            print('List, ', list)
+            print('Wohnungen verteilt, Anzahl: ', wohnungs_anzahl_verteilt)
+            # Einwohnerzahl zuordnen
+            einwohnerzahl = group.iloc[0]['Zensus_Einwohner']
+
+            personen_anzahl = sum([float(group.iloc[0]['Zensus_1_Person']),
+                    float(group.iloc[0]['Zensus_2_Personen']),
+                    float(group.iloc[0]['Zensus_3_Personen']),
+                    float(group.iloc[0]['Zensus_4_Personen']),
+                    float(group.iloc[0]['Zensus_5_Personen']),
+                    float(group.iloc[0]['Zensus_6_Personen_und_mehr'])])
+            print('einwohnerzahl, ', einwohnerzahl)
+            print('personen_anzahl, ', personen_anzahl)
+            if personen_anzahl == 0:
+                '''
+                Wenn keine Angaben da sind, werden die Bewohnerinnen gleichmäßig aufgeteilt
+                '''
+
+                bew_pro_wohnung = int(group.iloc[0]['Zensus_Einwohner']) / wohnungs_anzahl_verteilt
+                for i in group.index:
+                    buses.at[i, 'Bewohnerinnen'] = bew_pro_wohnung * buses.at[i, 'Haushalte']
+                print('Nächste Gruppe')
+                continue
+
+
+            # anteile der bew pro Haushalttyp
+            group = group.replace("–", 0)
+            bew_1_anteil = float(group.iloc[0]['Zensus_1_Person'])/personen_anzahl
+            bew_2_anteil = float(group.iloc[0]['Zensus_2_Personen'])/personen_anzahl
+            bew_3_anteil = float(group.iloc[0]['Zensus_3_Personen'])/personen_anzahl
+            bew_4_anteil = float(group.iloc[0]['Zensus_4_Personen'])/personen_anzahl
+            bew_5_anteil = float(group.iloc[0]['Zensus_5_Personen'])/personen_anzahl
+            bew_6_anteil = float(group.iloc[0]['Zensus_6_Personen_und_mehr'])/personen_anzahl
+            print('bew_1_anteil, ', bew_1_anteil)
+            print('bew_2_anteil, ', bew_2_anteil)
+            print('bew_3_anteil, ', bew_3_anteil)
+            print('bew_4_anteil, ', bew_4_anteil)
+            print('bew_5_anteil, ', bew_5_anteil)
+            print('bew_6_anteil, ', bew_6_anteil)
+
+            # Einwohner solange auf wohnungen ateilig verteilen bis Einwohnerzahl erreicht ist
+            # Jeder bus benötigt dabei aber auf jeden Fall mindestens einen Einwohner
+            einwohner_verteilt = wohnungs_anzahl_verteilt
+            while einwohner_verteilt < einwohnerzahl:
+                print('einwohner_verteilt, ', einwohner_verteilt)
+                if len(list) == 0:
+                    print("Anzahl an Einwohner, die nicht verteilt werden konnten: ", einwohnerzahl - einwohner_verteilt)
+                    break
+                # zufälligen index aus list auswählen
+                random_index = np.random.choice(list)
+                # random_index aus list löschen, damit nicht immer der gleiche bus ausgewählt wird
+                list.remove(random_index)
+
+                random_value = np.random.rand()
+                print('random_value, ', random_value)
+                print('Anteile ', bew_1_anteil, bew_2_anteil, bew_3_anteil, bew_4_anteil, bew_5_anteil, bew_6_anteil)
+                if random_value < bew_1_anteil:
+                    buses.at[random_index, 'Bewohnerinnen'] += 0
+                    buses.at[random_index, 'Bus_1_Person'] += 1
+                    einwohner_verteilt += 0
+                    print('bew_1_anteil, ', bew_1_anteil)
+
+                elif random_value < bew_1_anteil + bew_2_anteil:
+                    buses.at[random_index, 'Bewohnerinnen'] += 1
+                    buses.at[random_index, 'Bus_2_Personen'] += 1
+                    einwohner_verteilt += 1
+                    print('bew_1_anteil + bew_2_anteil, ', bew_1_anteil + bew_2_anteil)
+                elif random_value < bew_1_anteil + bew_2_anteil + bew_3_anteil:
+                    buses.at[random_index, 'Bewohnerinnen'] += 2
+                    buses.at[random_index, 'Bus_3_Personen'] += 1
+                    einwohner_verteilt += 2
+                    print('bew_1_anteil + bew_2_anteil + bew_3_anteil, ', bew_1_anteil + bew_2_anteil + bew_3_anteil)
+                elif random_value < bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil:
+                    buses.at[random_index, 'Bewohnerinnen'] += 3
+                    buses.at[random_index, 'Bus_4_Personen'] += 1
+                    einwohner_verteilt += 3
+                    print('bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil, ', bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil)
+                elif random_value < bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil + bew_5_anteil:
+                    buses.at[random_index, 'Bewohnerinnen'] += 4
+                    buses.at[random_index, 'Bus_5_Personen'] += 1
+                    einwohner_verteilt += 4
+                    print('bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil + bew_5_anteil, ', bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil + bew_5_anteil)
+                else:
+                    '''
+                    Auch bei 6 Personen Haushalt nur 5 Personen
+                    '''
+                    buses.at[random_index, 'Bewohnerinnen'] += 4
+                    buses.at[random_index, 'Bus_6_Personen_und_mehr'] += 1
+                    einwohner_verteilt += 5
+                    print('bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil + bew_5_anteil + bew_6_anteil, ', bew_1_anteil + bew_2_anteil + bew_3_anteil + bew_4_anteil + bew_5_anteil + bew_6_anteil)
+
+            # Anpassung der Anzahl der 1 Personenn Wohnung, um die Anzahl der Einwohner zu erreichen
+            # Einwohner werden zu Beginn auf die Wohnungen verteilt, sodass jede Wohnung mindestens einen Einwohner hat
+            # Dieser wird aber später nicht hinzugefügt, wenn es um die Verteilung der Personen pro Wohnung geht
+            for bus in group.index:
+                dif = int(buses.at[bus, 'Bewohnerinnen']) - (buses.at[bus, 'Bus_1_Person'] + buses.at[bus, 'Bus_2_Personen']*2 + buses.at[bus, 'Bus_3_Personen']*3 + buses.at[bus, 'Bus_4_Personen']*4 + buses.at[bus, 'Bus_5_Personen']*5 + buses.at[bus, 'Bus_6_Personen_und_mehr']*6)
+                print('dif, ', dif)
+                if dif > 0:
+                    buses.at[bus, 'Bus_1_Person'] += dif
+                    print('Anpassung um ', dif, ' auf 1 Person')
+
+            print('Fertig mit den Einwohnern')
+            
+
+
+            print('Nächste Gruppe')
+    # Löschen von Spalten, die nicht mehr benötigt werden
+    buses.drop(columns=['Bus_1_Wohnung', 'Bus_2_Wohnungen', 'Bus_3bis6_Wohnungen', 'Bus_7bis12_Wohnungen', 'Bus_13undmehr_Wohnungen'], inplace=True)
+    return buses
+
+
+
 def technik_fill(buses: pd.DataFrame, Technik: list[str], p_total: list[float]) -> pd.DataFrame:
     """
     Füllt das Grid-Objekt mit den Techniken basierend auf den gegebenen Anteilen.
@@ -263,7 +536,7 @@ def technik_fill(buses: pd.DataFrame, Technik: list[str], p_total: list[float]) 
 
     pv_plz = pd.read_csv("input/mastr_values_per_plz.csv", sep=",").set_index("PLZ")
     plz = int(buses['plz_code'].values[0])
-    solar_power = pv_plz.loc[plz, 'Solar_Installed_Capacity_[MW]']
+    solar_power = pv_plz.loc[plz, 'Mean_Solar_Installed_Capacity_[MW]']
 
     for tech, p in zip(Technik, p_total):
         buses = func.technik_sortieren(buses, tech, p, solar_power)
@@ -278,26 +551,13 @@ def technik_fill(buses: pd.DataFrame, Technik: list[str], p_total: list[float]) 
 
 
 
-def loads_zuordnen(grid: pd.DataFrame, buses: pd.DataFrame, bbox: pd.DataFrame, env=None) -> pypsa.Network:
-    """
-    Fügt dem PyPSA-Netzwerk Lasten, Solargeneratoren und Wärmepumpen basierend auf den Busdaten hinzu.
-    
-    Args:
-        grid (pypsa.Network): Das PyPSA-Netzwerk, dem die Lasten und Generatoren hinzugefügt werden sollen.
-        buses (pd.DataFrame): DataFrame mit den Busdaten.
-        bbox (list): Liste mit den Koordinaten der Bounding Box in der Form [left, bottom, right, top].
-        env (Environment, optional): Die Umgebung, die für die Last- und Generatorerstellung verwendet wird. Wenn None, wird eine neue Umgebung erstellt.
-        
-    Returns:
-        pypsa.Network: Das aktualisierte PyPSA-Netzwerk mit den hinzugefügten Lasten und Generatoren.
-    """
 
+def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], env=None):
     if env is None:
         environment = func.env_wetter(bbox)
     else:
         environment = env
         
-
     # Zeit sollte auch schon integriert sein, wenn Lasten schon im Netz sind
     """
     Angepasst an env ?????
@@ -312,71 +572,119 @@ def loads_zuordnen(grid: pd.DataFrame, buses: pd.DataFrame, bbox: pd.DataFrame, 
 
     # Lasten sollten schon im Netz integriert sein, hier nur Beispielwerte
     """
-    Alle Loads erstmal löschen? Weil von ding0 und dann alle einheitlich?
+    Alle Loads und StorageUnits erstmal löschen
     """
+    grid.loads.drop(grid.loads.index, inplace=True)
+
+    # StorageUnits löschen
+    grid.storage_units.drop(grid.storage_units.index, inplace=True)
+
     # Liste zum Hinzufügen von Loads
     load_cols = {}
     # Hinzufügen von buses
     e_auto_buses = buses.index[buses["Power_E_car"].notna()]
     e_auto_cols = {}
+
+    def haus_auto(typ, anz, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment):
+        aufruf += 1
+        power, occupants = demand_load.create_haus(people=anz, index=snapshots, env=environment)
+        grid.add("Load", name=bus + f"{bus}_load_{aufruf}", bus=bus, carrier="AC")
+        load_cols[f"{bus}_load_{aufruf}"] = power
+        bew -= anz
+        if bus in e_auto_buses:
+            e_auto_power = demand_load.create_e_car(occ = occupants, index=snapshots, env=environment)
+            grid.add("StorageUnit", name=bus + f"{bus}_E_Auto_{aufruf}", bus=bus, carrier="E_Auto")
+            e_auto_cols[f"{bus}_E_Auto_{aufruf}"] = e_auto_power
+            if buses.loc[bus, 'Power_E_car'] == buses.loc[bus, 'Factor_E_car']:
+                # bus aus Liste entfernen
+                e_auto_buses.remove(bus)
+            else:
+                buses.loc[bus, 'Power_E_car'] -= buses.loc[bus, 'Factor_E_car']
+        
+        return buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf
+
     
-    # for bus in buses.index:
-    #     print(f"Prüfe, ob Load für {bus} existiert...")
-    #     existing = grid.loads[(grid.loads['bus'] == bus)]
-    #     """
-    #     Doch alle Loads erste entfehrnen, dann alle neu hinzufügen?
-    #     Würde e-auto erleichtern
-    #     """
-    #     if existing.empty:
-    #         # Lasten hinzufügen
-    #         """
-    #         Max. allowed number of occupants per apartment is 5
-    #         """
-    #         # power = demand_load.create_haus(people=buses.loc[bus, 'Zensus_Einwohner_sum'], env=environment)
-    #         power, occupants = demand_load.create_haus(people=3, index=snapshots, env=environment)
-    #         # Hier wird angenommen, dass p_set eine Serie ist, die die Lasten für jede Stunde enthält
-    #         # power = pd.Series(power[:len(grid.snapshots)], index=grid.snapshots)
-    #         print("Snapshots grid:", grid.snapshots)
-    #         print("Index power:", power.index)
-    #         print("Sind sie gleich? ", power.index.equals(grid.snapshots))
+    for bus in buses.index:
+        print('-----------------------------------')
+        print('Neuer Bus')
+        print('-----------------------------------')
+        print(f"Prüfe, ob Load für {bus} existiert...")
+        existing = grid.loads[(grid.loads['bus'] == bus)]
+        """
+        Doch alle Loads erste entfehrnen, dann alle neu hinzufügen?
+        Würde e-auto erleichtern
+        """
+        if existing.empty:
 
-    #         print(f"Load {bus}_load wird hinzugefügt.")
-    #         grid.add("Load",
-    #                 name=bus + "_load",
-    #                 bus=bus,
-    #                 carrier="AC")
-    #         print(f"Load {bus}_load jetzt hinzugefügt.")
-    #         load_cols[bus + "_load"] = power
+            bew = buses.loc[bus, 'Bewohnerinnen']
+            aufruf = 0
+            # Bev auf ganze Zahl runden
+            bew = int(round(bew))
 
-    #         if bus in e_auto_buses:
-    #                     power = demand_load.create_e_car(occ = occupants, index=snapshots, env=environment)
-    #                     grid.add("StorageUnit",
-    #                             name=bus + "_E_Auto",
-    #                             bus=bus,
-    #                             carrier="E_Auto")
-    #                     e_auto_cols[bus + "_E_Auto"] = power
-    #                     print(f"Generator {bus}_E_Auto hinzugefügt.")
+            if buses.loc[bus, 'Bus_1_Person'] > 0:
+                for i in range(int(buses.loc[bus, 'Bus_1_Person'])):
+                    print('Jetzt 1 Person')
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_1_Person', 1, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+ 
+            if buses.loc[bus, 'Bus_2_Personen'] > 0:
+                for i in range(int(buses.loc[bus, 'Bus_2_Personen'])):
+                    print('Jetzt 2 Personen')
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_2_Personen', 2, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
 
-    #     else:
-    #         print(f"Load für {bus} existiert bereits.")
+            if buses.loc[bus, 'Bus_3_Personen'] > 0:
+                print('Jetzt 3 Personen')
+                for i in range(int(buses.loc[bus, 'Bus_3_Personen'])):
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_3_Personen', 3, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
 
-    # # Alle neuen Spalten zu p_max_pu hinzufügen
-    # grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
-    # grid.storage_units_t.p = pd.concat([grid.storage_units_t.p, pd.DataFrame(e_auto_cols)], axis=1)
+            if buses.loc[bus, 'Bus_4_Personen'] > 0:
+                print('Jetzt 4 Personen')
+                for i in range(int(buses.loc[bus, 'Bus_4_Personen'])):
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_4_Personen', 4, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
 
-    print("Lasten und E-Auto hinzugefügt.")
+            if buses.loc[bus, 'Bus_5_Personen'] > 0:
+                print('Jetzt 5 Personen')
+                for i in range(int(buses.loc[bus, 'Bus_5_Personen'])):
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_5_Personen', 5, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+
+            if buses.loc[bus, 'Bus_6_Personen_und_mehr'] > 0:
+                print('Jetzt 6 und mehr Personen')
+                for i in range(int(buses.loc[bus, 'Bus_6_Personen_und_mehr'])):
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_6_Personen_und_mehr', 5, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+
+            while bew > 0:
+                print(f"Es sind noch {bew} Bewohner übrig, die keinem Haushaltstyp zugeordnet wurden.")
+                if bew >= 5:
+                    print('Rest: Jetzt 5 Personen')
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_5_Personen', 5, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+                if bew == 4:
+                    print('Rest: Jetzt 4 Personen')
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_4_Personen', 4, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+                if bew == 3:
+                    print('Rest: Jetzt 3 Personen')
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_3_Personen', 3, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+                if bew == 2:
+                    print('Rest: Jetzt 2 Personen')
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_2_Personen', 2, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+                if bew == 1:
+                    print('Rest: Jetzt 1 Person')
+                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_1_Person', 1, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+
+        else:
+            print(f"Load für {bus} existiert bereits.")
+
+    # Alle neuen Spalten zu p_max_pu hinzufügen
+    grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
+    grid.storage_units_t.p = pd.concat([grid.storage_units_t.p, pd.DataFrame(e_auto_cols)], axis=1)
+
     """
-    Carrier und Type komplett egal?
+    Alle Solargeneratoren erstmal löschen
     """
+    grid.generators.drop(grid.generators.index[grid.generators['type'] == 'solar'], inplace=True)
 
-    """
-    Alle Solargeneratoren erstmal löschen? Weil von ding0 und dann alle einheitlich?
-    """
     #solar_buses = buses.index[buses["Power_solar"].notna()]
     solar_buses = buses.index[buses["Power_solar"] != 0]
     solar_cols = {}
     for bus in solar_buses:
-        print(f"Prüfe, ob Generator für {bus} existiert...")
         existing = grid.generators[(grid.generators['bus'] == bus)]
 
         """
@@ -385,19 +693,17 @@ def loads_zuordnen(grid: pd.DataFrame, buses: pd.DataFrame, bbox: pd.DataFrame, 
         """
         beta = buses.loc[bus, 'HauptausrichtungNeigungswinkel_Anteil']
         gamma = buses.loc[bus, 'Hauptausrichtung_Anteil']
-        print(f"Beta: {beta}, Gamma: {gamma}")
 
         # Ost-Weste wird in zwei halbe PV aufgeteilt
         if gamma == 'Ost-West':
             gamma_1 = 'Ost'
             gamma_2 = 'West'
-            power_1 = demand_load.create_pv(peakpower=100*buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_1, index=snapshots, env=environment)
-            power_2 = demand_load.create_pv(peakpower=100*buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_2, index=snapshots, env=environment)
-
+            power_1 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_1, index=snapshots, env=environment)
+            power_2 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_2, index=snapshots, env=environment)
             power = power_1 + power_2
 
         else:
-            power = demand_load.create_pv(peakpower=100*buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
+            power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
         
         if existing.empty:
             # Generator hinzufügen
@@ -424,7 +730,6 @@ def loads_zuordnen(grid: pd.DataFrame, buses: pd.DataFrame, bbox: pd.DataFrame, 
     if solar_cols:
         grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
 
-    print("Solargeneratoren hinzugefügt.")
 
     #HP_amb_buses = buses.index[buses["Power_HP_ambient"].notna()]
     HP_buses = buses.index[buses["Power_HP"] != 0]

@@ -17,10 +17,16 @@ import data as data
 # left =  11.044533685584453    # Right longitude
 # right =  11.084893505520695  # Left longitude
 
-top =  49.3727 # # Upper latitude
-bottom = 49.372485 # Lower latitude
-left =  12.703688   # Right longitude
-right =  12.704 # Left longitude
+top =  49.374518600877046 # # Upper latitude
+bottom = 49.36971937206515 # Lower latitude
+left =  12.697361279468392   # Right longitude
+right =  12.708888681047798  # Left longitude
+
+# 2 Nodes
+# top =  49.3727 # # Upper latitude
+# bottom = 49.372485 # Lower latitude
+# left =  12.703688   # Right longitude
+# right =  12.704 # Left longitude
 
 bbox = [left, bottom, right, top]
 
@@ -31,48 +37,28 @@ grids_dir = "input/grids"
 #Grid creation
 grid_1, bbox_1 = mf.ding0_grid(bbox, grids_dir, output_file_grid)
 
-# DataFrame für alle Daten erstellen
-buses_df = grid_1.buses.copy()
 
 """
 Check durch PLOT
 """
-if not buses_df.empty:
-    # Netz plotten (ohne Generator-Farben)
-    grid_1.plot(bus_sizes=1 / 2e9)
-    # Generator-Positionen extrahieren
-    tra_buses = grid_1.transformers['bus1']
-    tra_coords = grid_1.buses.loc[tra_buses][['x', 'y']]
-    # Generatoren rot darüberplotten
-    plt.scatter(tra_coords['x'], tra_coords['y'], color='red', label='Transformers', zorder=5)
-    plt.legend()
-    plt.show()
 
-#%%
+# Netz plotten (ohne Generator-Farben)
+grid_1.plot(bus_sizes=1 / 2e9)
+# Generator-Positionen extrahieren
 tra_buses = grid_1.transformers['bus1']
 tra_coords = grid_1.buses.loc[tra_buses][['x', 'y']]
+# Generatoren rot darüberplotten
+plt.scatter(tra_coords['x'], tra_coords['y'], color='red', label='Transformers', zorder=5)
+plt.legend()
+plt.show()
 
-# Schleife über alle Busse
-for bus, row in grid_1.buses.iterrows():
-    # Basisplot
-    grid_1.plot(bus_sizes=1 / 2e9)
-    
-    # Transformer-Positionen rot
-    plt.scatter(tra_coords['x'], tra_coords['y'], color='red', label='Transformers', zorder=5)
-
-    # aktuellen Bus grün markieren
-    plt.scatter(row['x'], row['y'], color='green', s=100, label=f"Bus {bus}", zorder=6)
-
-    plt.legend()
-    plt.title(f"Bus {bus} hervorgehoben")
-    plt.show()
 #%% STEP 2
 
 # Daten laden
 
 # OSM Daten
 buffer = 0.0002  # entspricht ungefähr 20 m
-buses_df, area, features = mf.osm_data(grid_1, buses_df, bbox_1, buffer)
+buses_df, area, features = mf.osm_data(grid_1, bbox_1, buffer)
 
 # Bundesland-Daten
 gpd_bundesland = gpd.read_file("input/georef-germany-postleitzahl.geojson")
@@ -149,6 +135,24 @@ file_solar = "input/Bev_data_solar.csv"
 file_ecar = "input/Bev_data_ecar.csv"
 file_hp = 'input/Bev_data_hp.csv'
 buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, file_solar, file_ecar, file_hp, Technik)
+
+
+#%%
+
+import pypsa
+
+grid_1 = pypsa.Network("input/grid_20251002.nc")
+buses_df = pd.read_csv("input/buses_20251002.csv", index_col=0)
+
+#%%
+buses_df.drop(columns=['Power_solar', 'Power_E_car', 'Power_HP'], inplace=True, errors='ignore')
+
+
+
+
+#%%
+
+buses_df = mf.wohnungen_zuordnen(buses_df)
 
 #%%
 # Technik in buses_df einfügen

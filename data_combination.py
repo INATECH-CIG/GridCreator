@@ -46,7 +46,7 @@ def generator_duplikate_zusammenfassen(grid:pypsa.Network) -> pypsa.Network:
 
     return grid
 
-def data_combination(ding0: pypsa.Network, buses_df: pd.DataFrame, osm: gpd.GeoDataFrame) -> pd.DataFrame:
+def data_combination(ding0: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFrame:
     """
     Kombiniert die Daten aus dem Ding0 Grid mit den OSM-Daten.
     Ordnet die Generatoren den Bussen zu und matched die End-Busse mit OSM-Nodes.
@@ -91,6 +91,12 @@ def data_combination(ding0: pypsa.Network, buses_df: pd.DataFrame, osm: gpd.GeoD
     ding0.buses.index = ding0.buses.index.astype(str)
     # Mit df_A verbinden
     buses_df = ding0.buses.join(generators_flat)
+
+    # Entfehrnen von Trafo Komponenten aus buses_df
+    trafos = ding0.transformers.copy()
+    bus_1, bus_2 = trafos['bus0'], trafos['bus1']
+    buses_df.drop(index=bus_1, inplace=True)
+    buses_df.drop(index=bus_2, inplace=True)
 
 
     # Matching osm und ding0
@@ -195,7 +201,7 @@ def data_combination(ding0: pypsa.Network, buses_df: pd.DataFrame, osm: gpd.GeoD
     #ding0.buses = ding0.buses.drop(columns=["matched_node_idx", "matched_dist"])
 
     # Spalten hinzufügen
-    new_data = pd.DataFrame(new_columns, index=ding0.buses.index)
+    new_data = pd.DataFrame(new_columns, index=buses_df.index)
     buses_df = pd.concat([buses_df, new_data], axis=1)
     # ding0.buses = ding0.buses.copy()
 

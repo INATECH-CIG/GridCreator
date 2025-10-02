@@ -12,6 +12,7 @@ from tqdm import tqdm
 from functools import reduce
 import numpy as np
 import ast
+import random
 from data import agg_dict
 
 import cdsapi
@@ -672,14 +673,14 @@ def faktoren(buses_zensus: pd.DataFrame, Technik_Faktoren: pd.DataFrame, Bev_dat
         
 
 
-def technik_sortieren(buses: pd.DataFrame, Technik: str, p_total: float, solar_power: float) -> pd.DataFrame:
+def technik_sortieren(buses: pd.DataFrame, Technik: str, amount_total: float, solar_power: float) -> pd.DataFrame:
     """
     Sortiert die Busse nach der Technik und verteilt die Leistung gleichmäßig auf die Busse
     
     Args:
         buses (pd.DataFrame): DataFrame mit den Busdaten.
         Technik (str): Die Technik, die verteilt werden soll.
-        p_total (float): Die gesamte Leistung, die verteilt werden soll.
+        amount_total (float): Die gesamte Anzahl, die verteilt werden soll.
         solar_power (float): Die installierte Solarleistung für die PLZ.
 
     Returns:
@@ -689,67 +690,94 @@ def technik_sortieren(buses: pd.DataFrame, Technik: str, p_total: float, solar_p
     # Neue Spalte vorbereiten
     buses['Power_' + Technik] = 0.0  # Initialisierung mit 0
 
+    # buses nach Faktor gruppieren und als dict sortiert speichern
+    buses_grouped = buses.groupby('Factor_'+Technik)
+    groups_dict = {key: group for key, group in sorted(buses_grouped, key=lambda x: x[0], reverse=True)}
+
+    #print("groups_dict:", groups_dict)
+
+    # Series zum späteren gemeinsamen Hinzufügen
+    power_col = pd.Series(0.0, index=buses.index)
 
     if Technik == 'solar' and "type_1" in buses.columns:
-        # power und gesamtzahl von Technik in bbox
+        print("Jetzt solar von type_1 übernehmen")
+        # Allen buses mit type_1 == Technik solar_power zuordnen
         mask_type1 = buses["type_1"] == Technik
-        p_bbox = buses.loc[mask_type1, "p_nom_1"].sum(min_count=1)
+        #print("mask_type1:", mask_type1)
+
+
+        power_col.loc[mask_type1] = solar_power
+        # buses.loc[mask_type1, 'Power_' + Technik] = solar_power
+
+
+        '''
+        Passt die p_nom_1 größe zu den Daten aus dem MArktstammdatenregister, oder übernehmen wir nur
+        dass dort eine pv ist, aber größe setzen wir selbst?
+        '''
+
+        # Bestimmung der Anzahl der gesetzten solaranlagen
         amount = mask_type1.sum()
-        p_mean = p_bbox / amount if amount > 0 else 0
-        # Buses sortieren, ohne Buses mit Solartechnik
-        bus_sorted = buses[(buses['p_nom_1'].isna()) & (buses['type_1'] != Technik)].copy()
-        bus_sorted = bus_sorted.sort_values(by=['Factor_'+Technik], ascending = False)
+
+        # Reduzieren von amount_total um die schon vorhandene Leistung
+        amount_total -= amount
+        # if amount_total < 0:
+        #     amount_total = 0
+        #     print("Achtung, es sind mehr Solaranlagen im Netz als verteilt werden sollen!")
+        # #print("Anzahl der schon vorhandenen Solaranlagen:", amount)
+        #print("Anzahl der noch zu verteilenden Solaranlagen:", amount_total)
+
+
+    
+    p = 0
+    for key in groups_dict.keys():
+        #print("key:", key)
+        # buszahl aus group random ziehen, zahl folgt aus wert des keys
+        group = groups_dict[key]
+
+        liste = []
+        if Technik == 'E_car':
+            print("E-Car, Haushalte berücksichtigen")
+            for bus in group.index:
+                # Bus index hinzufügen, so oft wie Haushalte existieren
+                liste.extend([bus] * int(buses.loc[bus, 'Haushalte']))
+                print("Bus:", bus, "Haushalte:", int(buses.loc[bus, 'Haushalte']))
+
+        else:
+            # Bus index hinzufügen
+            print("Andere Technik, Haushalte nicht berücksichtigen")
+            liste = group.index.tolist()
         
-        # Vorhandene Solar in neue Spalte überschreiben
-        buses.loc[mask_type1, 'Power_' + Technik] = buses.loc[mask_type1, 'p_nom_1']
-        buses['Power_' + Technik] = buses['Power_' + Technik].fillna(0)
+        
+        print("Liste für Technik", Technik, ":", liste)
 
-    # Solar power von Marktstammdatenregister
-        p_total = solar_power
+        #print("group:", group)
 
-    else:
-        p_bbox = 0
-        """
-        Wert muss für E-Car und HP definiert werden, möglichst genau für jede bbox
-        E-Car: 5km Raster/Einwohner * Einwohner bbox
-        HP für Landkreis?
-        """
-        # Zu verteilende Technik
-        technik_bbox = 5
-        amount = len(buses)/technik_bbox if technik_bbox > 0 else 0
-        p_mean = p_total / amount if amount > 0 else 0
-        # Buses sortieren
-        bus_sorted = buses.sort_values(by=['Factor_'+Technik], ascending = False)
-    
+        # 5 zeilen random ziehen
+        sample_size = int(min(key, len(liste))) # Sicherstellen, dass die Stichprobengröße nicht größer als die Gruppengröße ist
+        sampled_buses_index = random.sample(liste, sample_size)  # Zufällige Auswahl von Bussen aus der Gruppe
+        #print("sampled_buses:", sampled_buses)
 
+        # setzen von ['Factor_Technik'] in buses auf Faktor
+        if Technik == 'solar':
+            print("Setze solar_power:", solar_power, "für buses als Power")
+            power_col.loc[sampled_buses_index] = solar_power
+            #print("Setze solar_power:", solar_power, "für buses:", sampled_buses.index.tolist())
+        else:
+            print("Setze:", key, "für buses als Power")
+            power_col.loc[sampled_buses_index] += key
 
-    # Falls keine Busse mit Technik gefunden wurden:
-    if amount == 0:
-        print("Keine Busse mit der Technik gefunden:", Technik)
-        return buses
-    
-
-    # Leistung, die noch verteilt werden muss
-    p_rest = p_total - p_bbox
-    if p_rest <= 0:
-        # Alles verteilt, nichts zu tun
-        print("Keine Leistung zu verteilen für Technik:", Technik)
-        print("Vorhandene Leistung:", p_bbox, "Gesamtleistung:", p_total)
-        return buses
-
-
-    # Buses die Technik bekommen
-    to_fill = bus_sorted.index.tolist()
-
-    # Alte vorhandene Werte übernehmen (nur aus type_1 mit passender Technik)
-
-    verteilte_leistung = 0.0
-
-    for idx in to_fill:
-        if verteilte_leistung + p_mean > p_rest:
+        p +=sample_size
+        if p > amount_total:
+            rest = int(p - amount_total)
+            print("p:", p   , "amount_total:", amount_total)
+            print("Rest wird abgezogen:", rest)
+            # rest zahl aus sample buses wieder random auf 0 setzen
+            rest_buses_index = random.sample(sampled_buses_index, rest)
+            power_col.loc[rest_buses_index] = 0
             break
-        buses.at[idx, 'Power_' + Technik] = p_mean
-        verteilte_leistung += p_mean
+
+    # gemeinsame Spalte hinzufügen
+    buses['Power_' + Technik] = power_col
 
     return buses
 
