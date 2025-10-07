@@ -6,7 +6,11 @@ import osmnx as ox
 import cartopy.crs as ccrs
 import geopandas as gpd
 import pandas as pd
-import data as data
+import daten_speichern as ds
+
+#%% STEP 0
+
+pfad = ds.daten_speichern()
 
 #%% STEP 1
 
@@ -17,22 +21,22 @@ import data as data
 # left =  11.044533685584453    # Right longitude
 # right =  11.084893505520695  # Left longitude
 
-top =  49.374518600877046 # # Upper latitude
-bottom = 49.36971937206515 # Lower latitude
-left =  12.697361279468392   # Right longitude
-right =  12.708888681047798  # Left longitude
+# top =  49.374518600877046 # # Upper latitude
+# bottom = 49.36971937206515 # Lower latitude
+# left =  12.697361279468392   # Right longitude
+# right =  12.708888681047798  # Left longitude
 
 # 2 Nodes
-# top =  49.3727 # # Upper latitude
-# bottom = 49.372485 # Lower latitude
-# left =  12.703688   # Right longitude
-# right =  12.704 # Left longitude
+top =  49.3727 # # Upper latitude
+bottom = 49.372485 # Lower latitude
+left =  12.703688   # Right longitude
+right =  12.704 # Left longitude
 
 bbox = [left, bottom, right, top]
 
 # Speichern vom Grid
-output_file_grid = "dist_grid.nc"
-grids_dir = "input/grids" 
+output_file_grid = f"{pfad}/dist_grid.nc"
+grids_dir = f"{pfad}/input/grids"
 
 #Grid creation
 grid_1, bbox_1 = mf.ding0_grid(bbox, grids_dir, output_file_grid)
@@ -61,7 +65,7 @@ buffer = 0.0002  # entspricht ungefähr 20 m
 buses_df, area, features = mf.osm_data(grid_1, bbox_1, buffer)
 
 # Bundesland-Daten
-gpd_bundesland = gpd.read_file("input/georef-germany-postleitzahl.geojson")
+gpd_bundesland = gpd.read_file(f"{pfad}/input/georef-germany-postleitzahl.geojson")
 
 # # buses als csv speichern
 # grid_2.buses.to_csv("buses.csv")
@@ -71,7 +75,7 @@ gpd_bundesland = gpd.read_file("input/georef-germany-postleitzahl.geojson")
 Ordner zensus_daten enthält nur kleinen Tewil aller Zensus-Tabellen, um die Ladezeiten zu verkürzen.
 Alle Tabellen sind im Ordner zensus_daten_all enthalten.
 """
-ordner = "input/zensus_daten"
+ordner = f"{pfad}/input/zensus_daten"
 #zensus = mf.daten_laden(ordner)
 
 """
@@ -130,22 +134,22 @@ Zensusdaten fehlen und müssen nocheinmal für Bundesländer addiert werden!
 Technik = ['solar', 'E_car', 'HP']
 
 # Technik zuordnen
-file_Faktoren = "input/Faktoren.csv"
-file_solar = "input/Bev_data_solar.csv"
-file_ecar = "input/Bev_data_ecar.csv"
-file_hp = 'input/Bev_data_hp.csv'
-buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, file_solar, file_ecar, file_hp, Technik)
+file_Faktoren = f"{pfad}/input/Faktoren.csv"
+file_solar = f"{pfad}/input/Bev_data_solar.csv"
+file_ecar = f"{pfad}/input/Bev_data_ecar.csv"
+file_hp = f"{pfad}/input/Bev_data_hp.csv"
+buses_df, factor_bbox = mf.technik_zuordnen(buses_df, file_Faktoren, file_solar, file_ecar, file_hp, Technik, pfad)
 
 
-#%%
+# #%%
 
-import pypsa
+# import pypsa
 
-grid_1 = pypsa.Network("input/grid_20251002.nc")
-buses_df = pd.read_csv("input/buses_20251002.csv", index_col=0)
+# grid_1 = pypsa.Network("input/grid_20251002.nc")
+# buses_df = pd.read_csv("input/buses_20251002.csv", index_col=0)
 
-#%%
-buses_df.drop(columns=['Power_solar', 'Power_E_car', 'Power_HP'], inplace=True, errors='ignore')
+# #%%
+# buses_df.drop(columns=['Power_solar', 'Power_E_car', 'Power_HP'], inplace=True, errors='ignore')
 
 
 
@@ -156,7 +160,7 @@ buses_df = mf.wohnungen_zuordnen(buses_df)
 
 #%%
 # Technik in buses_df einfügen
-buses_df = mf.technik_fill(buses_df, Technik, factor_bbox)
+buses_df = mf.technik_fill(buses_df, Technik, factor_bbox, pfad)
 
 
 
@@ -164,7 +168,7 @@ buses_df = mf.technik_fill(buses_df, Technik, factor_bbox)
 
 # Zeitreihen hinzufügen
 
-grid_1 = mf.loads_zuordnen(grid_1, buses_df, bbox_1)
+grid_1 = mf.loads_zuordnen(grid_1, buses_df, bbox_1, pfad)
 
 
 #%% STEP 5

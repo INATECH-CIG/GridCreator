@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-from data import solar_dict
+from data_old import solar_dict
 #%% PyCity-Module
 from pycity_base.classes.timer import Timer
 from pycity_base.classes.weather import Weather
@@ -226,3 +226,61 @@ def create_hp(index: pd.Index, env: Environment, hp_params=None, flow_temp=None,
 
     return power_series # Rückgabe nur von elektrischer Leistung
 
+
+def create_gewerbe(type: str, demand_per_year, index, env):
+    """
+    Erzeugt ein Gewerbe-Profil.
+
+    Args:
+        type: Typ des Gewerbes (z.B. "Büro", "Einzelhandel", "Gastgewerbe")
+        index: Zeitstempel für das Gewerbe-Profil
+        env: Environment-Objekt (für Wetterdaten, falls benötigt)
+
+        
+    Returns:
+        power_series: Pandas-Serie mit der elektrischen Leistung des Gewerbes in kW
+    """
+
+    if type == 'sports':
+        print("Stadion wird erstellt")
+        meth = 3
+        el_demand = ElectricalDemand(
+            env,
+            method=meth,
+            method_3_type = type,
+            annual_demand=demand_per_year
+        )
+        power = el_demand.get_power()
+        '''
+        [power] = W
+        muss in MW umgerechnet werden!!
+        [power] = [power] / 1e6
+        '''
+        power = power * 1e-6  # in MW
+
+        # Rückgabe als Pandas-Serie
+        power_series = pd.Series(power, index=index, name='el_load_MW')
+
+
+
+    else:
+        # Strombedarf (stochastisch, mit Geräten & Licht)
+        meth = 1
+        el_demand = ElectricalDemand(
+            env,
+            method=meth,
+            annual_demand = demand_per_year,
+            profile_type = type,
+        )
+        power = el_demand.get_power()
+        '''
+        [power] = W
+        muss in MW umgerechnet werden!!
+        [power] = [power] / 1e6
+        '''
+        power = power * 1e-6  # in MW
+
+        # Rückgabe als Pandas-Serie
+        power_series = pd.Series(power, index=index, name='el_load_MW')
+
+    return power_series

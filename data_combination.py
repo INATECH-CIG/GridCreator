@@ -5,19 +5,11 @@ import geopandas as gpd
 from shapely.geometry import Point
 import networkx as nx
 
-# Import Für TypeHints
-import pypsa
 
-
-def generator_duplikate_zusammenfassen(grid:pypsa.Network) -> pypsa.Network:
+def generator_duplikate_zusammenfassen(grid):
     """
     Fasst Generatoren am gleichen Bus mit gleichem Typ (carrier) zusammen.
     Addiert p_nom und ersetzt Mehrfacheinträge durch einen einzigen.
-
-    Args:
-        grid (pypsa.Network): Das PyPSA-Netzwerk mit möglichen Duplikaten.
-    Returns:
-        pypsa.Network: Das bereinigte PyPSA-Netzwerk ohne Duplikate.
     """
     gens = grid.generators
 
@@ -46,19 +38,7 @@ def generator_duplikate_zusammenfassen(grid:pypsa.Network) -> pypsa.Network:
 
     return grid
 
-def data_combination(ding0: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFrame:
-    """
-    Kombiniert die Daten aus dem Ding0 Grid mit den OSM-Daten.
-    Ordnet die Generatoren den Bussen zu und matched die End-Busse mit OSM-Nodes.
-    
-    Args:
-        ding0 (pypsa.Network): Das Ding0 Netz.
-        buses_df (pd.DataFrame): DataFrame mit den Bus-Daten.
-        osm (gpd.GeoDataFrame): GeoDataFrame mit den OSM-Daten.
-
-    Returns:
-        pd.DataFrame: DataFrame mit den kombinierten Daten.
-    """
+def data_combination(ding0, osm): # (ding0, buses_df, osm):
 
     # Doppeltte Generatoren werden zu einem zusammengefasst
     ding0 = generator_duplikate_zusammenfassen(ding0)
@@ -92,7 +72,7 @@ def data_combination(ding0: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFram
     # Mit df_A verbinden
     buses_df = ding0.buses.join(generators_flat)
 
-    # Entfehrnen von Trafo Komponenten aus buses_df
+    # Entfernen von Trafo Komponenten aus buses_df
     trafos = ding0.transformers.copy()
     bus_1, bus_2 = trafos['bus0'], trafos['bus1']
     buses_df.drop(index=bus_1, inplace=True)
@@ -111,7 +91,7 @@ def data_combination(ding0: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFram
     end_buses = [bus for bus in G.nodes if G.degree(bus) == 1]
 
     # Nur diese Buses fürs Matching verwenden
-    matching_buses = ding0.buses.loc[ding0.buses.index.isin(end_buses)].copy()
+    matching_buses = buses_df.loc[buses_df.index.isin(end_buses)].copy()
 
 
 
@@ -166,10 +146,12 @@ def data_combination(ding0: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFram
 
     final_df = pd.DataFrame(final_matches, columns=["bus_idx", "node_idx", "dist"])
 
+    # Endbusse: matching_buses enthält sie schon
+    end_buses_df = matching_buses.copy()
 
     # Ergebnis initialisieren
-    buses_df["matched_node_idx"] = None
-    buses_df["matched_dist"] = None
+    end_buses_df["matched_node_idx"] = None
+    end_buses_df["matched_dist"] = None
 
     # Index-Zuordnung (von gefiltertem Matching-Set auf Gesamtset)
     match_bus_ids = matching_buses.index.to_list()
@@ -181,14 +163,14 @@ def data_combination(ding0: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFram
         bus_id = match_bus_ids[bus_idx]
 
         # Werte eintragen
-        buses_df.at[bus_id, "matched_node_idx"] = node_idx
-        buses_df.at[bus_id, "matched_dist"] = dist
+        end_buses_df.at[bus_id, "matched_node_idx"] = node_idx
+        end_buses_df.at[bus_id, "matched_dist"] = dist
 
     # Neue Spalten aus OSM-Daten übertragen
     new_columns = {}
     for col in nodes_gdf.columns:
         values = []
-        for idx in buses_df["matched_node_idx"]:
+        for idx in end_buses_df["matched_node_idx"]:
             if pd.notna(idx) and int(idx) < len(nodes_gdf):
                 values.append(nodes_gdf.iloc[int(idx)][col])
             else:
@@ -201,9 +183,8 @@ def data_combination(ding0: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFram
     #ding0.buses = ding0.buses.drop(columns=["matched_node_idx", "matched_dist"])
 
     # Spalten hinzufügen
-    new_data = pd.DataFrame(new_columns, index=buses_df.index)
-    buses_df = pd.concat([buses_df, new_data], axis=1)
+    new_data = pd.DataFrame(new_columns, index=end_buses_df.index)
+    end_buses_df = pd.concat([end_buses_df, new_data], axis=1)
     # ding0.buses = ding0.buses.copy()
 
-    return buses_df
-
+    return end_buses_df

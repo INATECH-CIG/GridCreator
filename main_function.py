@@ -101,7 +101,7 @@ def osm_data(net: pypsa.Network, bbox_neu: list[float], buffer: float) -> tuple[
     # osm Data abrufen
     Area, Area_features = func.get_osm_data(bbox_osm)
     # Speichern der OSM Daten
-    Area_features.to_file("Area_features.geojson", driver="GeoJSON")
+    # Area_features.to_file("Area_features.geojson", driver="GeoJSON")
 
     Area_features_df = Area_features.reset_index()
 
@@ -170,7 +170,7 @@ def bundesland_zensus(ordner: str, datei: str, bundesland: str) -> pd.DataFrame:
 
 
 
-def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, file_ecar: str, file_hp: str, technik_arr: list[str]) -> tuple[pd.DataFrame, list[float]]:
+def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, file_ecar: str, file_hp: str, technik_arr: list[str], pfad: str) -> tuple[pd.DataFrame, list[float]]:
     """
     Ordnet den Bussen im Netzwerk verschiedene Techniken basierend auf Zensus- und Bevölkerungsdaten zu.
     
@@ -187,7 +187,7 @@ def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, f
     """
     
     
-    Technik_Faktoren = pd.read_csv(file_Faktoren, sep=";")
+    Technik_Faktoren = pd.read_csv(file_Faktoren)
     Technik_Faktoren = Technik_Faktoren.set_index("Technik")
 
     Bev_data_solar = pd.read_csv(file_solar, sep=",")
@@ -242,7 +242,7 @@ def technik_zuordnen(buses: pd.DataFrame, file_Faktoren: str, file_solar: str, f
     Die ID muss den buses noch hinzugefügt werden
     '''
     if 'E_car' in technik_arr:
-        buses_zulassung = func.zulassung(buses)
+        buses_zulassung = func.zulassung(buses, pfad)
         technik = 'E_car'
         i = technik_arr.index(technik)
         buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, Technik_Faktoren, Bev_data_ecar, bbox_zensus, 'E_car', buses_zulassung)
@@ -521,7 +521,7 @@ def wohnungen_zuordnen(buses):
 
 
 
-def technik_fill(buses: pd.DataFrame, Technik: list[str], p_total: list[float]) -> pd.DataFrame:
+def technik_fill(buses: pd.DataFrame, Technik: List[str], p_total: List[float], pfad: str) -> pd.DataFrame:
     """
     Füllt das Grid-Objekt mit den Techniken basierend auf den gegebenen Anteilen.
     
@@ -534,9 +534,9 @@ def technik_fill(buses: pd.DataFrame, Technik: list[str], p_total: list[float]) 
         grid: Das aktualisierte Grid-Objekt mit den zugeordneten Techniken.
     """
 
-    pv_plz = pd.read_csv("input/mastr_values_per_plz.csv", sep=",").set_index("PLZ")
+    pv_plz = pd.read_csv(f"{pfad}/input/mastr_values_per_plz.csv", sep=",").set_index("PLZ")
     plz = int(buses['plz_code'].values[0])
-    solar_power = pv_plz.loc[plz, 'Mean_Solar_Installed_Capacity_[MW]']
+    solar_power = pv_plz.loc[plz, 'Mean_Solar_Installed_Capacity_[MW]'] * 1000  # in kW
 
     for tech, p in zip(Technik, p_total):
         buses = func.technik_sortieren(buses, tech, p, solar_power)
@@ -552,9 +552,9 @@ def technik_fill(buses: pd.DataFrame, Technik: list[str], p_total: list[float]) 
 
 
 
-def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], env=None):
+def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], pfad: str, env=None):
     if env is None:
-        environment = func.env_wetter(bbox)
+        environment = func.env_wetter(bbox, pfad)
     else:
         environment = env
         
@@ -582,8 +582,18 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
     # Liste zum Hinzufügen von Loads
     load_cols = {}
     # Hinzufügen von buses
-    e_auto_buses = buses.index[buses["Power_E_car"].notna()]
+    e_auto_buses = buses.index[buses["Power_E_car"].notna()].tolist()
     e_auto_cols = {}
+
+    # Haushaltsgrößen in einem Dictionary
+    household_types = {
+        "Bus_1_Person": 1,
+        "Bus_2_Personen": 2,
+        "Bus_3_Personen": 3,
+        "Bus_4_Personen": 4,
+        "Bus_5_Personen": 5,
+        "Bus_6_Personen_und_mehr": 6,  # kannst du später dynamisch gestalten
+                        }
 
     def haus_auto(typ, anz, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment):
         aufruf += 1
@@ -616,58 +626,21 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
         """
         if existing.empty:
 
-            bew = buses.loc[bus, 'Bewohnerinnen']
+            bew = int(round(buses.loc[bus, 'Bewohnerinnen']))
             aufruf = 0
-            # Bev auf ganze Zahl runden
-            bew = int(round(bew))
 
-            if buses.loc[bus, 'Bus_1_Person'] > 0:
-                for i in range(int(buses.loc[bus, 'Bus_1_Person'])):
-                    print('Jetzt 1 Person')
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_1_Person', 1, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
- 
-            if buses.loc[bus, 'Bus_2_Personen'] > 0:
-                for i in range(int(buses.loc[bus, 'Bus_2_Personen'])):
-                    print('Jetzt 2 Personen')
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_2_Personen', 2, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+            for typ, anz in household_types.items():
+                n_haushalte = int(buses.loc[bus, typ])
+                if n_haushalte > 0:
+                    for i in range(n_haushalte):
+                        print(f"{n_haushalte}× {anz}-Personenhaushalt(e) in {bus}")
+                        buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto(typ, anz, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
 
-            if buses.loc[bus, 'Bus_3_Personen'] > 0:
-                print('Jetzt 3 Personen')
-                for i in range(int(buses.loc[bus, 'Bus_3_Personen'])):
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_3_Personen', 3, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
-
-            if buses.loc[bus, 'Bus_4_Personen'] > 0:
-                print('Jetzt 4 Personen')
-                for i in range(int(buses.loc[bus, 'Bus_4_Personen'])):
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_4_Personen', 4, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
-
-            if buses.loc[bus, 'Bus_5_Personen'] > 0:
-                print('Jetzt 5 Personen')
-                for i in range(int(buses.loc[bus, 'Bus_5_Personen'])):
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_5_Personen', 5, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
-
-            if buses.loc[bus, 'Bus_6_Personen_und_mehr'] > 0:
-                print('Jetzt 6 und mehr Personen')
-                for i in range(int(buses.loc[bus, 'Bus_6_Personen_und_mehr'])):
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_6_Personen_und_mehr', 5, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
 
             while bew > 0:
-                print(f"Es sind noch {bew} Bewohner übrig, die keinem Haushaltstyp zugeordnet wurden.")
-                if bew >= 5:
-                    print('Rest: Jetzt 5 Personen')
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_5_Personen', 5, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
-                if bew == 4:
-                    print('Rest: Jetzt 4 Personen')
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_4_Personen', 4, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
-                if bew == 3:
-                    print('Rest: Jetzt 3 Personen')
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_3_Personen', 3, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
-                if bew == 2:
-                    print('Rest: Jetzt 2 Personen')
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_2_Personen', 2, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
-                if bew == 1:
-                    print('Rest: Jetzt 1 Person')
-                    buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto('Bus_1_Person', 1, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
+                anz = min(bew, 5)  # Nimm maximal 5 Personen für den Haushalt
+                print(f"Es sind noch {bew} Bewohner  an Bus {bus} übrig, die keinem Haushaltstyp zugeordnet wurden.")
+                buses, bew, load_cols, e_auto_cols, e_auto_buses, aufruf = haus_auto(f"Rest_{anz}_Personen", anz, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment)
 
         else:
             print(f"Load für {bus} existiert bereits.")
@@ -687,12 +660,9 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
     for bus in solar_buses:
         existing = grid.generators[(grid.generators['bus'] == bus)]
 
-        """
-        Power für Solar ist immer 0, warum?
-        Im Test gab es schöne Kurven
-        """
         beta = buses.loc[bus, 'HauptausrichtungNeigungswinkel_Anteil']
         gamma = buses.loc[bus, 'Hauptausrichtung_Anteil']
+
 
         # Ost-Weste wird in zwei halbe PV aufgeteilt
         if gamma == 'Ost-West':
@@ -703,6 +673,7 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
             power = power_1 + power_2
 
         else:
+            # power = demand_load.create_pv(peakpower=100*buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
             power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
         
         if existing.empty:
@@ -716,15 +687,14 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
                     p_nom=buses.loc[bus, 'Power_solar'])
             
 
+            #grid.generators_t.p_max_pu[bus + "_solar"] = power.values
             solar_cols[bus + "_solar"] = power.values
 
-
+            print('Solar Power:', power.values)
 
         else:
-            # Load zu existierendem Generator hinzufügen
+
             solar_cols[bus + "_solar"] = power.values
-
-
 
 
     if solar_cols:
@@ -744,13 +714,63 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
                 bus=bus,
                 carrier="HP",
                 type="HP")
+        #grid.generators_t.p_max_pu[bus + "_HP"] = power.values
         hp_cols[bus + "_HP"] = power.values
+
 
 
     if hp_cols:
         grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
-    
+
+    print('------------------------------------')
+    print('Gewerbe hinzufügen')
+    print('------------------------------------')
+
+    # Gewerbe hinzufügen
+    if "osm_building" in buses.columns:
+        gewerbe_buses = buses.index[buses["osm_building"] != 0]
+        gewerbe_cols = {}
+
+        gewerbe_dict = {
+            'commercial': 'G0',
+            'industrial': 'G0',
+            'office': 'G1',
+            'kiosk': 'G4',
+            'retail': 'G4',
+            'supermarket': 'G4',
+            'warehouse': 'G0',
+            'sports_hall': 'sports',
+            'stadium': 'sports'
+        }
+
+        '''
+        Wie viel Verbrauch?????
+        '''
+
+        for bus in gewerbe_buses:
+            for gewerbe, typ in gewerbe_dict.items():
+                if buses.loc[bus, 'osm_building'] == gewerbe:
+                    power = demand_load.create_gewerbe(typ, demand_per_year=1000, index=snapshots, env=environment)
+                    grid.add("Load", name=bus + "_Gewerbe", bus=bus, carrier="Gewerbe")
+                    gewerbe_cols[bus + "_Gewerbe"] = power.values
+            
+
+    # Shops hinzufügen
+    if "osm_shop" in buses.columns:
+        shops_buses = buses.index[buses["osm_shop"] != 0]
+        shops_cols = {}
+        for bus in shops_buses:
+            if buses.loc[bus, 'osm_shop'] == 'bakery':
+                power = demand_load.create_gewerbe('G5', demand_per_year=1000, index=snapshots, env=environment)
+            else:
+                power = demand_load.create_gewerbe('G4', demand_per_year=1000, index=snapshots, env=environment)
+            grid.add("Load", name=bus + "_Shop", bus=bus, carrier="Shop")
+            shops_cols[bus + "_Shop"] = power.values
+
     return grid
+
+
+
 
 def pypsa_vorbereiten(grid: pypsa.Network) -> pypsa.Network:
     """
@@ -793,19 +813,33 @@ def pypsa_vorbereiten(grid: pypsa.Network) -> pypsa.Network:
 
     for i, trafo in grid.transformers.iterrows():
         # lv bus extrahieren
-        bus_lv = trafo['bus1']  
+        bus_mv = trafo['bus0']  
         # name setzen
         gen_name = f"Generator_am_{i}"
 
         grid.add("Generator",
                 name=gen_name,
-                bus=bus_lv,
+                bus=bus_mv,
                 carrier="gas",
                 p_nom=100,
                 p_nom_extendable=True,
                 capital_cost=500,
                 marginal_cost=50,
                 efficiency=0.4)
+
+        storage_name = f"Storage_am_{i}"
+
+        grid.add("Generator",
+                name=storage_name,
+                bus=bus_mv,
+                carrier="battery",
+                p_min = -1,
+                p_max = 0,
+                p_nom_extendable=True,
+                capital_cost=500,
+                marginal_cost=50,
+                efficiency_store=0.9,
+                efficiency_dispatch=0.9)  
         
     return grid
 

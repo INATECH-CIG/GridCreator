@@ -13,7 +13,7 @@ from functools import reduce
 import numpy as np
 import ast
 import random
-from data import agg_dict
+from data_old import agg_dict
 
 import cdsapi
 from scipy import datasets
@@ -191,7 +191,6 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
 
 
     # Manuell laden
-
     Zensus2022_Bevoelkerungszahl_100m = (pl.scan_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", separator=";")
                                          .filter(pl.col("GITTER_ID_100m")
                                                  .is_in(columns)).select("GITTER_ID_100m",
@@ -202,104 +201,165 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
     buses_df = buses_df.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
 
 
-    Zensus2022_Durchschn_Nettokaltmiete_100m = (pl.scan_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_100m-Gitter.csv", separator=";")
-                                                .filter(pl.col("GITTER_ID_100m").is_in(columns))
-                                                .select("GITTER_ID_100m",
-                                                        "durchschnMieteQM",
-                                                        ).collect()
+    Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m = (pl.scan_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "durchschnMieteQM",
+                                                            ).collect()
                                                 )
-    Zensus2022_Durchschn_Nettokaltmiete_100m = Zensus2022_Durchschn_Nettokaltmiete_100m.to_pandas()
-    Zensus2022_Durchschn_Nettokaltmiete_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Durchschn_Nettokaltmiete_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_100m, on="GITTER_ID_100m", how="left")
-
-
-    Zensus2022_Eigentuemerquote_100m = (pl.scan_csv(ordner + "/Zensus2022_Eigentuemerquote_100m-Gitter.csv", separator=";")
-                                        .filter(pl.col("GITTER_ID_100m")
-                                        .is_in(columns)).select("GITTER_ID_100m",
-                                                                "Eigentuemerquote").collect()
-                                        )
-    Zensus2022_Eigentuemerquote_100m = Zensus2022_Eigentuemerquote_100m.to_pandas()
-    Zensus2022_Eigentuemerquote_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Eigentuemerquote_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Eigentuemerquote_100m, on="GITTER_ID_100m", how="left")
-
-
-    Zensus2022_Heizungsart_100m = (pl.scan_csv(ordner + "/Zensus2022_Heizungsart_100m-Gitter_utf8.csv", separator=";")
-                                   .filter(pl.col("GITTER_ID_100m").is_in(columns))
-                                   .select("GITTER_ID_100m",
-                                           "Fernheizung",
-                                           "Etagenheizung",
-                                           "Blockheizung",
-                                           "Zentralheizung",
-                                           "Einzel_Mehrraumoefen",
-                                           "keine_Heizung").collect()
-                                    )
-    Zensus2022_Heizungsart_100m = Zensus2022_Heizungsart_100m.to_pandas()
-    Zensus2022_Heizungsart_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Heizungsart_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Heizungsart_100m, on="GITTER_ID_100m", how="left")
+    Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m = Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m.to_pandas()
+    Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m, on="GITTER_ID_100m", how="left")
 
 
 
 
-    # Zensus2022_Bevoelkerungszahl_100m = (pl.scan_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", separator=";")
-    #                                      .filter(pl.col("GITTER_ID_100m")
-    #                                              .is_in(columns)).select("GITTER_ID_100m",
-    #                                                                      "Einwohner").collect()
-    # )
-
-    # Zensus2022_Durchschn_Nettokaltmiete_100m = (pl.scan_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_100m-Gitter.csv", separator=";")
-    #                                             .filter(pl.col("GITTER_ID_100m").is_in(columns))
-    #                                             .select("GITTER_ID_100m",
-    #                                                     "durchschnMieteQM",
-    #                                                     ).collect()
-    # )
-
-    # Zensus2022_Eigentuemerquote_100m = (pl.scan_csv(ordner + "/Zensus2022_Eigentuemerquote_100m-Gitter.csv", separator=";")
-    #                                     .filter(pl.col("GITTER_ID_100m")
-    #                                     .is_in(columns)).select("GITTER_ID_100m",
-    #                                                             "Eigentuemerquote").collect()
-    #                                     )
-
-    # Zensus2022_Heizungsart_100m = (pl.scan_csv(ordner + "/Zensus2022_Heizungsart_100m-Gitter_utf8.csv", separator=";")
-    #                                .filter(pl.col("GITTER_ID_100m").is_in(columns))
-    #                                .select("GITTER_ID_100m",
-    #                                        "Insgesamt_Heizungsart",
-    #                                        "Fernheizung",
-    #                                        "Etagenheizung",
-    #                                        "Blockheizung",
-    #                                        "Zentralheizung",
-    #                                        "Einzel_Mehrraumoefen",
-    #                                        "keine_Heizung").collect()
-    # )
+    Zensus2022_Groesse_des_privaten_Haushalts_100m = (pl.scan_csv(ordner + "/Zensus2022_Groesse_des_privaten_Haushalts_100m-Gitter.csv", separator=";")
+                                                        .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                        .select("GITTER_ID_100m",
+                                                                "1_Person",
+                                                                "2_Personen",
+                                                                "3_Personen",
+                                                                "4_Personen",
+                                                                "5_Personen",
+                                                                "6_Personen_und_mehr"
+                                                                ).collect()
+                                                        )
+    Zensus2022_Groesse_des_privaten_Haushalts_100m = Zensus2022_Groesse_des_privaten_Haushalts_100m.to_pandas()
+    Zensus2022_Groesse_des_privaten_Haushalts_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Groesse_des_privaten_Haushalts_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Groesse_des_privaten_Haushalts_100m, on="GITTER_ID_100m", how="left")
 
 
 
-    # Zensus2022_Bevoelkerungszahl_100m = Zensus2022_Bevoelkerungszahl_100m.to_pandas()
-    # Zensus2022_Durchschn_Nettokaltmiete_100m = Zensus2022_Durchschn_Nettokaltmiete_100m.to_pandas()
-    # Zensus2022_Eigentuemerquote_100m = Zensus2022_Eigentuemerquote_100m.to_pandas()
-    # Zensus2022_Heizungsart_100m = Zensus2022_Heizungsart_100m.to_pandas()
-
-    # Zensus2022_Bevoelkerungszahl_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Bevoelkerungszahl_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    # Zensus2022_Durchschn_Nettokaltmiete_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Durchschn_Nettokaltmiete_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    # Zensus2022_Eigentuemerquote_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Eigentuemerquote_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    # Zensus2022_Heizungsart_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Heizungsart_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-
-    # buses_df = buses_df.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
-    # buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_100m, on="GITTER_ID_100m", how="left")
-    # buses_df = buses_df.merge(Zensus2022_Eigentuemerquote_100m, on="GITTER_ID_100m", how="left")
-    # buses_df = buses_df.merge(Zensus2022_Heizungsart_100m, on="GITTER_ID_100m", how="left")
-
-    # buses_df.rename(columns={"Einwohner": "Zensus_Einwohner",
-    #                          "durchschnMieteQM": "Zensus_durchschnMieteQM",
-    #                          "Eigentuemerquote": "Zensus_Eigentuemerquote",
-    #                          "Insgesamt_Heizungsart": "Zensus_Insgesamt_Heizungsart",
-    #                          "Fernheizung": "Zensus_Fernheizung",
-    #                          "Etagenheizung": "Zensus_Etagenheizung",
-    #                          "Blockheizung": "Zensus_Blockheizung",
-    #                          "Zentralheizung": "Zensus_Zentralheizung",
-    #                          "Einzel_Mehrraumoefen": "Zensus_Einzel_Mehrraumoefen",
-    #                          "keine_Heizung": "Zensus_keine_Heizung"}, inplace=True)
 
 
+
+    Zensus2022_Staatsangehoerigkeit_Gruppen_100m = (pl.scan_csv(ordner + "/Zensus2022_Staatsangehoerigkeit_Gruppen_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "EU27_Land",
+                                                            ).collect()
+                                                    )
+    Zensus2022_Staatsangehoerigkeit_Gruppen_100m = Zensus2022_Staatsangehoerigkeit_Gruppen_100m.to_pandas()
+    Zensus2022_Staatsangehoerigkeit_Gruppen_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Staatsangehoerigkeit_Gruppen_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Staatsangehoerigkeit_Gruppen_100m, on="GITTER_ID_100m", how="left")
+
+
+    Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m = (pl.scan_csv(ordner + "/Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m-Gitter.csv", separator=";")
+                                                            .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                            .select("GITTER_ID_100m",
+                                                                    "Ehep_Kinder_ab18",
+                                                                    "NichtehelLG_mind_1Kind_unter18",
+                                                                    ).collect()
+                                                            )
+    Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m = Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m.to_pandas()
+    Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m, on="GITTER_ID_100m", how="left")
+
+
+
+
+
+    Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m = (pl.scan_csv(ordner + "/Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "30bis39",
+                                                            "40bis49",
+                                                            ).collect()
+                                                )
+    Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m = Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m.to_pandas()
+    Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m, on="GITTER_ID_100m", how="left")
+
+    Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m = (pl.scan_csv(ordner + "/Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "Freist_ZFH",
+                                                            ).collect()
+                                                )
+    Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m = Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m.to_pandas()
+    Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m, on="GITTER_ID_100m", how="left")
+
+
+
+    """
+    Baujahr hatte Gitter_ID_100M !!!!
+    in csv geändert
+    """
+
+    Zensus2022_Baujahr_JZ_100m = (pl.scan_csv(ordner + "/Zensus2022_Baujahr_JZ_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "Vor1919",
+                                                            "a1970bis1979",
+                                                            ).collect()
+                                                )
+    Zensus2022_Baujahr_JZ_100m = Zensus2022_Baujahr_JZ_100m.to_pandas()
+    Zensus2022_Baujahr_JZ_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Baujahr_JZ_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Baujahr_JZ_100m, on="GITTER_ID_100m", how="left")
+
+
+    Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m = (pl.scan_csv(ordner + "/Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "1_Wohnung",
+                                                            "2_Wohnungen",
+                                                            "3bis6_Wohnungen",
+                                                            "7bis12_Wohnungen",
+                                                            "13undmehr_Wohnungen"
+                                                            ).collect()
+                                                )
+    Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m = Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m.to_pandas()
+    Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m, on="GITTER_ID_100m", how="left")
+
+    Zensus2022_Geb_Gebaeudetyp_Groesse_100m = (pl.scan_csv(ordner + "/Zensus2022_Geb_Gebaeudetyp_Groesse_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "FreiEFH",
+                                                            ).collect()
+                                                )
+    Zensus2022_Geb_Gebaeudetyp_Groesse_100m = Zensus2022_Geb_Gebaeudetyp_Groesse_100m.to_pandas()
+    Zensus2022_Geb_Gebaeudetyp_Groesse_100m.rename(columns={
+                                           "FreiEFH": "Geb_FreiEFH",
+                                                        }, inplace=True)
+    Zensus2022_Geb_Gebaeudetyp_Groesse_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Geb_Gebaeudetyp_Groesse_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Geb_Gebaeudetyp_Groesse_100m, on="GITTER_ID_100m", how="left")
+
+
+
+    Zensus2022_Energietraeger_100m = (pl.scan_csv(ordner + "/Zensus2022_Energietraeger_100m-Gitter_utf8.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "Gas",
+                                                            "Holz_Holzpellets",
+                                                            "Kohle",
+                                                            ).collect()
+                                                )
+    Zensus2022_Energietraeger_100m = Zensus2022_Energietraeger_100m.to_pandas()
+    Zensus2022_Energietraeger_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Energietraeger_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Energietraeger_100m, on="GITTER_ID_100m", how="left")
+
+
+    Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m = (pl.scan_csv(ordner + "/Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m-Gitter.csv", separator=";")
+                                                    .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                                                    .select("GITTER_ID_100m",
+                                                            "Holz_Holzpellets",
+                                                            "Kohle",
+                                                            "Fernwaerme",
+                                                            ).collect()
+                                                )
+    Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m = Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m.to_pandas()
+    Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m.rename(columns={
+                                           "Holz_Holzpellets": "Geb_Holz_Holzpellets",
+                                           "Kohle": "Geb_Kohle",
+                                           "Fernwaerme": "Geb_Fernwaerme",
+                                                        }, inplace=True)
+    Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
+    buses_df = buses_df.merge(Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m, on="GITTER_ID_100m", how="left")
+
+    
     return buses_df
 
 
@@ -603,7 +663,7 @@ def calculate_factors(df: pd.DataFrame, factors: dict, kategorien_eigenschaften:
 
 
 
-def zulassung(net_buses: pd.DataFrame) -> pd.DataFrame:
+def zulassung(net_buses: pd.DataFrame, pfad: str) -> pd.DataFrame:
     """
     Ordnet den Bussen im Netzwerk die ID_5km aus den 5km Rasterdaten zu.
     
@@ -615,7 +675,7 @@ def zulassung(net_buses: pd.DataFrame) -> pd.DataFrame:
     """
 
 
-    data = gpd.read_file("input/FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson")
+    data = gpd.read_file(f"{pfad}/input/FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson")
 
     # Bus Koordinaten in GeoDataFrame umwandeln
     gdf_buses = gpd.GeoDataFrame(net_buses.copy(), geometry=gpd.points_from_xy(net_buses["x"], net_buses["y"]), crs=data.crs)
@@ -657,6 +717,9 @@ def faktoren(buses_zensus: pd.DataFrame, Technik_Faktoren: pd.DataFrame, Bev_dat
         '''
         Auf Cluster unnötig
         '''
+        print('Technik: ', technik)
+        print("Bev_data_Zensus.columns vor:", Bev_data_Zensus.columns)
+        print("Technik_Faktoren.columns vor:", Technik_Faktoren.columns)
         Bev_data_Zensus = Bev_data_Zensus[list(Technik_Faktoren.columns)]
         buses_zensus = buses_zensus[list(Technik_Faktoren.columns)]
 
@@ -666,9 +729,13 @@ def faktoren(buses_zensus: pd.DataFrame, Technik_Faktoren: pd.DataFrame, Bev_dat
         for j, zensus in buses_zensus.iterrows():
             id = id_df.loc[j]
             factor_bus = zensus @ Technik_Faktoren.loc[technik]
+            if factor_bus < 0:
+                factor_bus = 0
             arr_factor.loc[j] = factor_bus / factor_area * Bev_data_Technik.loc[id]
 
         factor_bbox = bbox_zensus @ Technik_Faktoren.loc[technik] / factor_area * Bev_data_Technik.loc[id]
+        if factor_bbox < 0:
+            factor_bbox = 0
         return arr_factor, factor_bbox
         
 
@@ -720,6 +787,12 @@ def technik_sortieren(buses: pd.DataFrame, Technik: str, amount_total: float, so
 
         # Reduzieren von amount_total um die schon vorhandene Leistung
         amount_total -= amount
+
+        # Wenn schon genug Solaranlagen vorhanden sind, abbrechen
+        if amount_total <= 0:
+            print("Keine Solaranlagen zu verteilen, da schon genug vorhanden sind.")
+            buses['Power_' + Technik] = power_col
+            return buses
         # if amount_total < 0:
         #     amount_total = 0
         #     print("Achtung, es sind mehr Solaranlagen im Netz als verteilt werden sollen!")
@@ -874,7 +947,7 @@ def relative_humidity(t: float, td: float) -> float:
     return rh
 
 
-def env_wetter(bbox: list, time_discretization: int = 3600, timesteps_horizon: int = 8760, timesteps_used_horizon: int = 8760, timesteps_total: int = 8760) -> Environment: #, year):
+def env_wetter(bbox: list, pfad: str, time_discretization: int = 3600, timesteps_horizon: int = 8760, timesteps_used_horizon: int = 8760, timesteps_total: int = 8760) -> Environment: #, year):
     """
     Lädt Wetterdaten von ERA5 für eine gegebene Bounding Box und berechnet relevante Umweltparameter.
     
@@ -953,7 +1026,7 @@ def env_wetter(bbox: list, time_discretization: int = 3600, timesteps_horizon: i
     datasets = {}
     for var, cod in variables:
         filename = 'GER_' +var + '.nc'
-        ds = xr.open_dataset(os.path.join('input/weather_2013', filename))
+        ds = xr.open_dataset(os.path.join(pfad, 'input/weather_2013', filename))
         datasets[var] = ds
         print(f"Variable {var} verarbeitet.")
 
