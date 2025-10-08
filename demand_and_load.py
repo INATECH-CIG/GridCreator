@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-from data_old import solar_dict
+from data import solar_dict
 #%% PyCity-Module
 from pycity_base.classes.timer import Timer
 from pycity_base.classes.weather import Weather
@@ -19,21 +19,15 @@ import pycity_base.classes.supply.heat_pump as hp
 
 
 #%%
-def create_haus(env: Environment, people: int, index: pd.Index, light_config: int = 10, meth: int = 2, weather_file: str = None) -> tuple[pd.Series, Occupancy]:
-    """
-    Erstellt ein Haushalts-Objekt mit elektrischer Last.
-    
-    Args:
-        env (Environment): Die Simulationsumgebung.
-        people (int): Anzahl der Personen im Haushalt.
-        index (pd.Index): Zeitstempel für die Lastprofile.
-        light_config (int, optional): Konfiguration für die Beleuchtung. Standard ist 10.
-        meth (int, optional): Methode zur Lastgenerierung. Standard ist 2.
-        weather_file (str, optional): Pfad zur Wetterdatei. Standard ist None.
-    
-    Returns:
-        tuple[pd.Series, Occupancy]: Ein Tupel mit der elektrischen Last als Pandas-Serie und dem Occupancy-Objekt.
-    """
+def create_haus(env, people, index, light_config = 10, meth = 2, weather_file=None):
+
+    '''
+    Eventuell umstellen auf Apartment statt ElectricalDemand
+    Nein, dann ist nur Methode=0 möglich, dafür aber auch heating
+
+    Selbst addieren und aus Apartment nur HotWater ziehen
+    '''
+
 
     # Nutzerprofil (3 Personen im Haushalt)
     occupancy = Occupancy(env, number_occupants=people)
@@ -48,6 +42,14 @@ def create_haus(env: Environment, people: int, index: pd.Index, light_config: in
         occupancy=occupancy.occupancy
     )
     power = el_demand.get_power()
+
+    '''
+    [power] = W
+    muss in MW umgerechnet werden!!
+    [power] = [power] / 1e6
+    '''
+    power = power * 1e-6  # in MW
+
     # Zeitstempel erzeugen
     """
     Sollte auch generell definiert und dann nur in Funktion  übergeben werden
@@ -56,7 +58,7 @@ def create_haus(env: Environment, people: int, index: pd.Index, light_config: in
     #index = pd.date_range(start=start, periods=len(power), freq=f'{int(timer.time_discretization/3600)}H')
 
     # Rückgabe als Pandas-Serie
-    power_series = pd.Series(power, index=index, name='el_load_kw')
+    power_series = pd.Series(power, index=index, name='el_load_MW')
 
     return power_series, occupancy # Occupancy-Objekt zurückgeben,
                                 # falls du z. B. in PyPSA auch Anwesenheiten
@@ -64,19 +66,7 @@ def create_haus(env: Environment, people: int, index: pd.Index, light_config: in
                                 # nutzen willst
 
 
-def create_e_car(env: Environment, occ: Occupancy, index: pd.Index) -> pd.Series:
-    """
-    Erstellt ein E-Auto-Ladeprofil basierend auf dem Belegungsprofil.
-
-    Args:
-        env (Environment): Die Simulationsumgebung.
-        occ (Occupancy): Das Belegungsprofil.
-        index (pd.Index): Zeitstempel für das Ladeprofil.
-
-    Returns:
-        pd.Series: Das E-Auto-Ladeprofil als Pandas-Serie.
-    """
-
+def create_e_car(env, occ, index):
     """
     Auto wird geladen wenn alle Bewhoner da sind
     """
@@ -89,8 +79,10 @@ def create_e_car(env: Environment, occ: Occupancy, index: pd.Index) -> pd.Series
             laden[idx] = 0
     """
     Mit wie viel lädt ein Auto?
+
+    Annahme 7kW, umgerechnet auf MW
     """
-    laden = laden * 7  # 7 kW Ladeleistung
+    laden = laden * 7 * 1e-3  # 7 kW Ladeleistung, umgerechnet auf MW
     
     laden = pd.Series(laden, index=index)
 
@@ -98,24 +90,7 @@ def create_e_car(env: Environment, occ: Occupancy, index: pd.Index) -> pd.Series
     return laden
 
 
-def create_pv(env: Environment, peakpower: float, index: pd.Index, beta: float, gamma: str, area: float = 10.0, eta_noct: float = 0.15, meth: int = 1) -> pd.Series:
-    """
-    Erstellt ein PV-Profil.
-
-    Args:
-        env (Environment): Die Simulationsumgebung.
-        peakpower (float): Die installierte Peak-Leistung der PV-Anlage in kW.
-        index (pd.Index): Zeitstempel für das PV-Profil.
-        beta (float): Neigungswinkel der PV-Anlage in Grad.
-        gamma (str): Ausrichtung der PV-Anlage (z.B. 'Süd', 'Ost', etc.).
-        area (float, optional): Fläche der PV-Anlage in m². Standard ist 10.0.
-        eta_noct (float, optional): Wirkungsgrad bei Nennbetriebsbedingungen. Standard ist 0.15.
-        meth (int, optional): Methode zur PV-Leistungsermittlung. Standard ist 1.
-
-    Returns:
-        pd.Series: Das PV-Profil als Pandas-Serie.
-    """
-
+def create_pv(env, peakpower, index, beta, gamma, area=10.0, eta_noct=0.15, meth=1):
     # Umgebung (Timer, Wetter, Preise)
 
 
@@ -130,24 +105,29 @@ def create_pv(env: Environment, peakpower: float, index: pd.Index, beta: float, 
     # Berechnung der PV-Leistung
     pv_power = pv_system.getPower()
 
+    '''
+    [pv_power] = MW
+    muss NICHT in MW umgerechnet werden!!
+    '''
+
     # Rückgabe als Pandas-Serie
-    power_series = pd.Series(pv_power, index=index, name='pv_power_kw')
+    power_series = pd.Series(pv_power, index=index, name='pv_power_MW')
 
     return power_series # Nur Rückgabe von Power
 
 
 
 
-def create_hp(index: pd.Index, env: Environment, hp_params=None, flow_temp=None, schedule= None) -> pd.Series:
+def create_hp(index, env, hp_params=None, flow_temp=None, schedule= None):
     """
     Erzeugt ein Wärmepumpen-Profil.
 
     Args:
         index: Zeitstempel für das Wärmepumpen-Profil
-        env: Environment-Objekt
         hp_params: Parameter für die Wärmepumpe (optional)
         flow_temp: Vorlauftemperatur (optional, Standardwert wird verwendet)
         schedule: Betriebsprofil der Wärmepumpe (optional, Standardwert wird verwendet)
+        env: Environment-Objekt (optional, falls benötigt)
 
     Returns:
         power_series: Pandas-Serie mit der elektrischen Leistung der Wärmepumpe in kW
@@ -203,6 +183,11 @@ def create_hp(index: pd.Index, env: Environment, hp_params=None, flow_temp=None,
     # Nominalwerte berechnen
     nominals= heatpump.getNominalValues(flow_temp)
 
+    '''
+    [nominals] = kW
+    Umrechnung von Power in MW
+    '''
+
 
     # Einfaches Betriebsprofil (z. B. Zufall ein/aus)
     if schedule is None:
@@ -219,13 +204,12 @@ def create_hp(index: pd.Index, env: Environment, hp_params=None, flow_temp=None,
     """
 
     # Verbrauch und Erzeugung berechnen
-    power = nominals[0] * schedule
+    power = nominals[0] * 1e-3 * schedule # in MW, durch Umrechnung von nominals von kW in MW
 
     # Rückgabe als Pandas-Serie
-    power_series = pd.Series(power, index=index, name='hp_power_kw')
+    power_series = pd.Series(power, index=index, name='hp_power_MW')
 
     return power_series # Rückgabe nur von elektrischer Leistung
-
 
 def create_gewerbe(type: str, demand_per_year, index, env):
     """

@@ -592,13 +592,13 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
         "Bus_3_Personen": 3,
         "Bus_4_Personen": 4,
         "Bus_5_Personen": 5,
-        "Bus_6_Personen_und_mehr": 6,  # kannst du später dynamisch gestalten
+        "Bus_6_Personen_und_mehr": 5,
                         }
 
     def haus_auto(typ, anz, buses, bus, bew, load_cols, e_auto_cols, e_auto_buses, aufruf, grid, snapshots, environment):
         aufruf += 1
         power, occupants = demand_load.create_haus(people=anz, index=snapshots, env=environment)
-        grid.add("Load", name=bus + f"{bus}_load_{aufruf}", bus=bus, carrier="AC")
+        grid.add("Load", name=f"{bus}_load_{aufruf}", bus=bus, carrier="AC")
         load_cols[f"{bus}_load_{aufruf}"] = power
         bew -= anz
         if bus in e_auto_buses:
@@ -699,6 +699,7 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
 
     if solar_cols:
         grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
+        grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
 
 
     #HP_amb_buses = buses.index[buses["Power_HP_ambient"].notna()]
@@ -721,6 +722,7 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
 
     if hp_cols:
         grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
+        grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
 
     print('------------------------------------')
     print('Gewerbe hinzufügen')
@@ -766,6 +768,9 @@ def loads_zuordnen(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], 
                 power = demand_load.create_gewerbe('G4', demand_per_year=1000, index=snapshots, env=environment)
             grid.add("Load", name=bus + "_Shop", bus=bus, carrier="Shop")
             shops_cols[bus + "_Shop"] = power.values
+    
+    if shops_cols:
+        grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(shops_cols, index=snapshots)], axis=1)
 
     return grid
 
