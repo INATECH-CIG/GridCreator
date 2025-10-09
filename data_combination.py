@@ -5,15 +5,24 @@ import geopandas as gpd
 from shapely.geometry import Point
 import networkx as nx
 
+# import for type hints
+import pypsa
 
-def generator_duplikate_zusammenfassen(grid):
+
+def generator_duplikate_zusammenfassen(grid: pypsa.Network) -> pypsa.Network:
     """
-    Fasst Generatoren am gleichen Bus mit gleichem Typ (carrier) zusammen.
-    Addiert p_nom und ersetzt Mehrfacheinträge durch einen einzigen.
+    Consolidates generators at the same bus with the same type (carrier).
+    Sums p_nom and replaces multiple entries with a single one.
+
+    Args:
+        grid (pypsa.Network): The power system network containing generators.
+
+    Returns:
+        pypsa.Network: The updated network with consolidated generators.
     """
     gens = grid.generators
 
-    # Gruppieren nach bus UND carrier (oder type, falls du das willst)
+    # Group by bus AND type
     grouped = gens.groupby(['bus', 'type'])
 
     new_generators = []
@@ -24,37 +33,38 @@ def generator_duplikate_zusammenfassen(grid):
             'name': f"{bus}_{type}",
             'bus': bus,
             'type': type,
-            'carrier': group['carrier'].iloc[0],  # Nimm den Carrier des ersten Eintrags
+            'carrier': group['carrier'].iloc[0], # Take the carrier from the first entry
             'p_nom': p_nom_sum
         })
 
-    # Lösche alte Generatoren
+    # Delete old generators
     grid.generators.drop(index=grid.generators.index, inplace=True)
 
-    # Neue Generatoren hinzufügen
+    # Add new generators
     for gen in new_generators:
         grid.add("Generator", **gen)
 
-
     return grid
 
-def data_combination(ding0, osm): # (ding0, buses_df, osm):
 
-    # Doppeltte Generatoren werden zu einem zusammengefasst
-    ding0 = generator_duplikate_zusammenfassen(ding0)
-
+def data_combination(grid: pypsa.Network, osm: gpd.GeoDataFrame) -> pd.DataFrame:
+    """
+    Combines grid data from a PyPSA network with OSM data based on spatial proximity.
+    Matches end buses in the grid to nearest OSM nodes within a specified distance.
     
-    # ding0 Generators den buses zuordnen
-
-    # Alle Zeilen von Generator nach "bus" gruppieren
-    grouped = ding0.generators.groupby("bus")
-
-    # Jede Gruppe zu einer einzelnen Zeile "entfalten"
-    # mit Spaltennamen
+    Args:
+        ding0 (pypsa.Network): The power system network containing buses and generators.
+        osm (gpd.GeoDataFrame): GeoDataFrame containing OSM data with geometry.
+        
+    Returns:
+        pd.DataFrame: DataFrame with combined information from ding0 and matched OSM nodes.
     """
-    Es sollte nur ein Generator pro Gruppe  sein, weil slar zusammengefasst ist und keine anderen Generatoren lv sind!!
-    Zur Sicherheit bleibt Schleife bestehen, im folgenden wird aber nur mit type_1 gearbeitet!
-    """
+
+    # Consolidate duplicate generators at the same bus
+    grid = generator_duplikate_zusammenfassen(grid)
+
+    # Flatten generators per bus
+    grouped = grid.generators.groupby("bus")
     rows = {}
     for name, group in grouped:
         group = group.drop(columns="bus").reset_index(drop=True)
@@ -63,76 +73,46 @@ def data_combination(ding0, osm): # (ding0, buses_df, osm):
             for col in group.columns:
                 flat_row[f"{col}_{i+1}"] = row[col]
         rows[name] = flat_row
-
-    # In DataFrame umwandeln
     generators_flat = pd.DataFrame.from_dict(rows, orient="index")
 
+    # Join bus data with flattened generators
+    grid.buses.index = grid.buses.index.astype(str)
+    buses_df = grid.buses.join(generators_flat)
 
-    ding0.buses.index = ding0.buses.index.astype(str)
-    # Mit df_A verbinden
-    buses_df = ding0.buses.join(generators_flat)
-
-    # Entfernen von Trafo Komponenten aus buses_df
-    trafos = ding0.transformers.copy()
-    bus_1, bus_2 = trafos['bus0'], trafos['bus1']
-    buses_df.drop(index=bus_1, inplace=True)
-    buses_df.drop(index=bus_2, inplace=True)
+    # Remove transformer buses from buses_df
+    trafos = grid.transformers.copy()
+    buses_df.drop(index=trafos['bus0'], inplace=True)
+    buses_df.drop(index=trafos['bus1'], inplace=True)
 
 
-    # Matching osm und ding0
-
-    # Nur end-buses für matching verwenden
-    # Graph aufbauen
+    # Identify end buses (degree=1) for matching
     G = nx.Graph()
-    for _, row in ding0.lines.iterrows():
+    for _, row in grid.lines.iterrows():
         G.add_edge(row["bus0"], row["bus1"])
-
-    # End-Busse: nur 1 Nachbar
     end_buses = [bus for bus in G.nodes if G.degree(bus) == 1]
-
-    # Nur diese Buses fürs Matching verwenden
     matching_buses = buses_df.loc[buses_df.index.isin(end_buses)].copy()
 
-
-
-    # osm Daten und Grid Daten kombinieren
-    # Laden der Nodes aus osm Daten
+    # Prepare OSM node coordinates
     nodes_gdf = osm[osm['element'] == 'node'].copy()
     nodes_gdf["lon"] = nodes_gdf.geometry.x
     nodes_gdf["lat"] = nodes_gdf.geometry.y
 
-    # Buses und Nodes zusammenbringen
-
-    # Bus-Koordinaten
+    # KD-Tree for nearest-neighbor matching
     bus_coords = np.array(list(zip(matching_buses.x, matching_buses.y)))
-
-    # Node-Koordinaten
     node_coords = np.array(list(zip(nodes_gdf.lon, nodes_gdf.lat)))
-
-    # KD-Tree
     tree = spatial.cKDTree(node_coords)
-
-
-    # für jeden Bus nächsten Node finden
-
-    # Maximaldistanz (ca. 50 m)
     max_dist = 0.0005
 
-    # Alle Zuordnungen innerhalb des Radius sammeln
+    # Collect all potential matches within max distance
     matches = []
     for bus_idx, coord in enumerate(bus_coords):
         node_idxs = tree.query_ball_point(coord, max_dist)
         for node_idx in node_idxs:
             dist = np.linalg.norm(coord - node_coords[node_idx])
             matches.append((bus_idx, node_idx, dist))
+    matches_df = pd.DataFrame(matches, columns=["bus_idx", "node_idx", "dist"]).sort_values("dist")
 
-    # DataFrame aller potenziellen Zuordnungen
-    matches_df = pd.DataFrame(matches, columns=["bus_idx", "node_idx", "dist"])
-
-    # Nach Entfernung sortieren (nächstgelegene zuerst)
-    matches_df = matches_df.sort_values("dist")
-
-    # Greedy-Zuordnung: jeder Node und jeder Bus nur einmal
+    # Greedy assignment: one bus -> one node
     used_nodes = set()
     used_buses = set()
     final_matches = []
@@ -143,30 +123,22 @@ def data_combination(ding0, osm): # (ding0, buses_df, osm):
             final_matches.append((b, n, row["dist"]))
             used_buses.add(b)
             used_nodes.add(n)
-
     final_df = pd.DataFrame(final_matches, columns=["bus_idx", "node_idx", "dist"])
 
-    # Endbusse: matching_buses enthält sie schon
+    # Add matched info to end_buses_df
     end_buses_df = matching_buses.copy()
-
-    # Ergebnis initialisieren
     end_buses_df["matched_node_idx"] = None
     end_buses_df["matched_dist"] = None
-
-    # Index-Zuordnung (von gefiltertem Matching-Set auf Gesamtset)
     match_bus_ids = matching_buses.index.to_list()
-
     for _, row in final_df.iterrows():
         bus_idx = int(row["bus_idx"])
         node_idx = row["node_idx"]
         dist = row["dist"]
         bus_id = match_bus_ids[bus_idx]
-
-        # Werte eintragen
         end_buses_df.at[bus_id, "matched_node_idx"] = node_idx
         end_buses_df.at[bus_id, "matched_dist"] = dist
 
-    # Neue Spalten aus OSM-Daten übertragen
+    # Add OSM node attributes to buses
     new_columns = {}
     for col in nodes_gdf.columns:
         values = []
@@ -177,14 +149,8 @@ def data_combination(ding0, osm): # (ding0, buses_df, osm):
                 values.append(None)
         new_columns[f"osm_{col}"] = values
 
-    """
-    Bei Bedarf behilfs Spalte zur Zuordnung löschen
-    """
-    #ding0.buses = ding0.buses.drop(columns=["matched_node_idx", "matched_dist"])
-
-    # Spalten hinzufügen
+    # Append new columns to end_buses_df
     new_data = pd.DataFrame(new_columns, index=end_buses_df.index)
     end_buses_df = pd.concat([end_buses_df, new_data], axis=1)
-    # ding0.buses = ding0.buses.copy()
 
     return end_buses_df

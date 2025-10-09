@@ -1,238 +1,116 @@
-#%% Import section
+import main_functions as mf
+import input_data as ds
 
-import osmnx as ox
-import networkx as nx
-import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
-import pypsa
-# import openpyxl # für pycity erforderlich
-import functions as func
-import grid_creation as gc
-import data_combination as dc
 
 
-
-#%% GPS Data eingeben
-""""
-Definieren des zu untersuchenden Bereichs
-Eingabe von Rechteck mit Koordinaten
-Koordinaten in WGS84 System
-"""
-
-top =  49.463 # # Upper latitude
-bottom = 49.460  # Lower latitude
-left =  11.397    # Right longitude
-right =  11.402   # Left longitude
-bbox = [left, bottom, right, top]
-
-
-
-#%% osm Data abrufen
-""""
-Abrufen der OSM Daten für den definierten Bereich
-Die Funktion get_osm_data() ist in functions_Linux.py definiert
-Tags sind in der Funktion definiert
-"""
-Area, Area_features = func.get_osm_data(bbox)
-
-
-
-#%% Plotten der osm-Daten
-"""
-Visualisierung der OSM Daten
-"""
-fig, ax = plt.subplots(figsize=(8, 8))
-ox.plot_graph(Area, ax=ax, show=False, close=False)
-Area_features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.7)
-plt.show()
-
-
-
-#%% Data Management: osm Data
-"""
-Speichern der Rohdaten
-Laden der Daten in ein GeoDataFrame, für weitere Datensammlung
-"""
-Area_features.to_file("Area_features.geojson", driver="GeoJSON")
-gpd_area_features = gpd.read_file('Area_features.geojson')
-#print(gpd_area_features.head())
-
-
-
-# #%% Grid erstellen
-"""
-Erstellen von Grid mit Ding0-Grids
-Aufrufen der Funktion, um aus vorgefertigten Grids, den gesuchten Bereich zu Filtern
-Die Funktion create_grid() ist in grid_creation.py definiert
-"""
-# Namen des Ordners mit den Grids
-grids_dir = "grids" 
-
-# Grid laden
-grid = gc.create_grid(bbox, grids_dir)
-
-# Grid speichern
-output_file = "dist_grid.nc"
-grid.export_to_netcdf(output_file)
-
-#%% Netz laden und plotten
-net = pypsa.Network("dist_grid.nc")
-net.plot(
-    bus_sizes=1 / 2e9,
-)
-plt.show()
 
 #%%
-import cartopy.crs as ccrs
-fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
-net.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
-ox.plot_graph(Area, ax=ax, show=False, close=False)
-Area_features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.7)
-plt.show()
+def GridCreator(top: float, bottom: float, left: float, right: float, steps=5, technologies=['solar', 'E_car', 'HP']) -> tuple:
+    '''
+    Main function for GridCreator  
+    Steps:
+    0. Save input data (input_data.py)
+    1. Create the grid (ding0_grid_generator.py)
+    2. Load OSM data and assign federal state information (osm_data.py, daten_zuordnung.py)
+    3. Assign technologies (technik_zuordnen.py, technik_fill.py, wohnungen_zuordnen.py)
+    4. Assign load profiles (loads_zuordnen.py)
+    5. Prepare the grid for PyPSA (pypsa_vorbereiten.py)
+    6. Optimize the grid (.optimize())
+    
+    Args:
+        top: Upper latitude
+        bottom: Lower latitude
+        left: Left longitude
+        right: Right longitude
+        steps: Number of steps to execute (1-6), default=5 (up to step 5)
+        
+    Returns:
+        grid_1: PyPSA grid
+        buses_df: DataFrame containing buses and related data
+        bbox_1: Bounding box of the selected area
+    '''
+
+    # STEP 0
+    path = ds.save_data()
+
+    # STEP 1
+    #Grid creation
+    bbox = [left, bottom, right, top]
+    grid, bbox = mf.ding0_grid(bbox, path)
+    # Initialize DataFrame for return
+    buses_df = pd.DataFrame()
+    area = gpd.GeoDataFrame()
+    features = gpd.GeoDataFrame()
+
+    # STEP 2
+    if steps >1:
+        # Load data
+        # OSM data
+        buffer = 0.0002  # corresponds to approximately 20 m
+        buses_df, area, features = mf.osm_data(grid, bbox, buffer)
+        # Federal state data
+        gpd_federal_state = gpd.read_file(f"{path}/input/georef-germany-postleitzahl.geojson")
+        buses_df = mf.data_assignment(buses_df, gpd_federal_state, path)
+    # STEP 3
+    if steps >2:
+        # Assign technologies
+        # Define technologies
+        gcp = technologies # gcp = generation and consumption plants
+        # Assign technologies
+        buses_df, factor_bbox = mf.gcp_assignment(buses_df, gcp, path)
+        buses_df = mf.appartments_assignment(buses_df)
+        # Add technology data to buses_df
+        buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, path)
+    # STEP 4
+    if steps >3:
+        # Add time series
+        grid = mf.loads_assignment(grid, buses_df, bbox, path)
+
+
+    # STEP 5
+    if steps >4:
+        # Prepare grid for pysa.optimize()
+        grid = mf.pypsa_preparation(grid)
+
+    return grid, buses_df, bbox, area, features
+
 #%%
 
+# top =  54.48594882134629 # # Upper latitude
+# bottom = 54.47265521486088 # Lower latitude
+# left =  11.044533685584453    # Right longitude
+# right =  11.084893505520695  # Left longitude
+'''
+Waldmünchen
+'''
+# top =  49.374518600877046 # # Upper latitude
+# bottom = 49.36971937206515 # Lower latitude
+# left =  12.697361279468392   # Right longitude
+# right =  12.708888681047798  # Left longitude
+'''
+2 Nodes
+'''
+top =  49.3727 # # Upper latitude
+bottom = 49.372485 # Lower latitude
+left =  12.703688   # Right longitude
+right =  12.704 # Left longitude
 
-# #%% Daten kombinieren
-"""
-Kombinieren der OSM Daten mit dem Grid
-Die Funktion data_combination() ist in data_combination.py definiert
-"""
-
-# csv Datei Speicherung zur Prüfung der Tabellen
-net.buses.to_csv("grid_alt")
-gpd_area_features.to_csv("gpd")
-print(net.buses.head())
-
-net.buses = dc.data_combination(net.buses, gpd_area_features)
-
-print(net.buses.head())
-net.buses.to_csv("grid_neu")
-
-# #%% BEISPIEL weitere Daten definieren
-
-# """
-# Funktionen im anderen Skript definieren
-
-# Hier nur als Beispiel für eine Funktion die die Fläche zurück gibt
-# """
-
-# def Fläche(line):
-#     return 5
+grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=5)
+# %%
+# STEP 6
+# .optimize()
 
 
+# # Fix Capacity
+# grid_1.optimize.fix_optimal_capacities()
 
+# # Set snapshots für Optimierung
+# start_time = pd.Timestamp("2023-01-01 00:00:00")
+# end_time = pd.Timestamp("2023-01-07 23:00:00")
+# snapshots = pd.date_range(start=start_time, end=end_time, freq='h')
+# grid_1.set_snapshots(snapshots)
 
-# #%% BEISPIEL weitere Daten berechnen
-
-# """
-# Fläche für jedes Nodes bestimmen
-
-# Hier nur als Beispiel für eine Funktion die die Fläche zurück gibt
-# """
-
-# gpd_area_features["Fläche"] = [None]*len(gpd_area_features)
-# for i in range(len(gpd_area_features)):
-#     line = gpd_area_features.iloc[i]
-#     gpd_area_features.at[i, "Fläche"] = Fläche(line)
-
-#     """
-#     weitere Bestimmungen in selber Schleife möglich
-#     oder weitere Schleifen starten, falls vorherige Daten benötigt werden
-#     """
-
-
-
-# %% Daten laden
-"""
-Vllt auch ganz am Anfang mit allen Packages direkt auch alle Daten laden
-"""
-
-pd_Zensus_Bevoelkerung_100m = pd.read_csv("Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
-
-
-gpd_bundesland = gpd.read_file("georef-germany-postleitzahl.geojson")
-
-
-
-#%% Generieren weiterer Daten und in Gesamttabelle hinzufügen
-
-"""
-Daten aus Area_features_df müssen zuerst mit Grid von Ding0 kombiniert werden
-ACHTUNG: Spaltennamen können sich ändern
-ACHTUNG: df Name kann sich ändern
-"""
-
-
-
-
-"""
-Koordinaten umrechnen
-
-ACHTUNG: in Area_features_df sind die Koordinaten in POINT() gespeichert
-
-"""
-print("fertig")
-print(gpd_area_features)
-gpd_area_features["Gauss_Krüger"] = [None]*len(gpd_area_features)
-
-for i in range(2): #len(Area_features_df)):
-    lon, lat = gpd_area_features["geometry"][i].x, gpd_area_features["geometry"][i].y
-    #lon = Area_features_df["lon"][i]
-    #lat = Area_features_df["lat"][i]
-
-    rechtswert, hochwert = func.WG_zu_Gauss(lon, lat)
-
-    gpd_area_features.at[i, "Gauss_Krüger"] = [rechtswert, hochwert]
-
-
-
-
-"""
-Kann für weitere ZENSUS Daten beliebig erweitert werden
-"""
-
-gpd_area_features["Bewohnerzahl"] = [None]*len(gpd_area_features)
-gpd_area_features["Zensus ID Zuordnung"] = [None]*len(gpd_area_features)
-
-for i in range(2): #len(Area_features_df)):
-    """
-    Abrufen der Koordinaten für jede Node
-    Extrahieren der Spalte und dann mit Index
-    """
-    #coordinate_x, coordiate_y = Area_features_df["Gauss_Krüger"][i]
-    coordinate_x = 4368251
-    coordinate_y = 2718751
-
-    gpd_area_features.at[i, "Zensus ID Zuordnung"] = func.gitter_ID(pd_Zensus_Bevoelkerung_100m, coordinate_x, coordinate_y)[2]
-
-    gpd_area_features.at[i, "Bewohnerzahl"] = func.get_population_count(pd_Zensus_Bevoelkerung_100m, gpd_area_features.at[i, "Zensus ID Zuordnung"]) 
-
-
-
-print(gpd_area_features.columns)
-"""
-Bundesland zuordnung
-"""
-gpd_area_features["Bundesland"] = [None]*len(gpd_area_features)
-for i in range(2): #len(Area_features_df)):
-    gpd_area_features.at[i, "Bundesland"] = func.Bundesland(gpd_bundesland, gpd_area_features.at[i, "addr:postcode"])
-
-
-print("fertig")
-
-# %% Daten kontrollieren
-"""
-Kontrollieren der Daten
-"""
-print(gpd_area_features.iloc[1])
-
-# gpd_area_features.to_file("Area_features_df.geojson", driver="GeoJSON")
-# # %% Speichern aller Daten
-# """
-# Daten als Excel speichern
-# """
-
-# df = pd.DataFrame(gpd_area_features)
-# excel_file = 'geodaten.xlsx'  # Name der Excel-Datei
-# df.to_excel(excel_file, index=False)
+#
+# grid_1.optimize()

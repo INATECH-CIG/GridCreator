@@ -1,8 +1,4 @@
 # Liste aller dictionaries
-import pandas as pd
-import numpy as np
-
-
 
 solar_dict={
     'Süd': 0,
@@ -15,10 +11,7 @@ solar_dict={
     'Nord': 180
 }
 
-
-
 agg_dict={
-    # 'Zensus_Einwohner': 'sum',
     'Zensus_Holz_Holzpellets': 'sum',
     'Zensus_Kohle': 'sum',
     'Zensus_Geb_Fernwaerme': 'sum',

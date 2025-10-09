@@ -1,5 +1,3 @@
-#%% Import
- 
 import geopandas as gpd
 from pyproj import Transformer
 import pandas as pd
@@ -8,15 +6,10 @@ import osmnx as ox
 import scipy.spatial as spatial
 import numpy as np
 import json
-from tqdm import tqdm
 from functools import reduce
 import numpy as np
 import ast
 import random
-from data_old import agg_dict
-
-import cdsapi
-from scipy import datasets
 import xarray as xr
 import os
 
@@ -25,23 +18,35 @@ from pycity_base.classes.weather import Weather
 from pycity_base.classes.prices import Prices
 from pycity_base.classes.environment import Environment
 
-# Import für TypeHints
+# Import for type hints
 import pypsa
 
 #%% Funktionen zum aufrufen
 
 
-#%% Funktionen zum aufrufen
+
+
+
+'''
+Anpassen an Abfrage zu commercial
+'''
+
+
+
+
 
 def get_osm_data(bbox: list) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
-    Ruft OSM-Daten für die gegebene Bounding Box ab und gibt sie zurück.
+    Fetches OpenStreetMap (OSM) data for a given bounding box.
 
     Args:
-        bbox (list): Eine Liste mit den Koordinaten der Bounding Box in der Form [left, bottom, right, top].
+        bbox (list): Bounding box coordinates in the format [left, bottom, right, top].
 
     Returns:
-        tuple: Ein Tupel bestehend aus den OSM-Daten und den OSM-Feature-Daten.
+        tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+            A tuple containing:
+            - The OSM graph for the area.
+            - The OSM features (buildings, land use, roads, etc.) as GeoDataFrames.
     """
 
     tags = {
@@ -78,9 +83,9 @@ def get_osm_data(bbox: list) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     'telecom': True,         # Telekommunikationseinrichtungen
     "waterway": True,         # Gewässer
     }
-    Area = ox.graph.graph_from_bbox(bbox, network_type="all", retain_all=True)
-    Area_features = ox.features.features_from_bbox(bbox, tags=tags)
-    return Area, Area_features
+    area_graph = ox.graph.graph_from_bbox(bbox, network_type="all", retain_all=True)
+    area_features = ox.features.features_from_bbox(bbox, tags=tags)
+    return area_graph, area_features
 
 
 def compute_bbox_from_buses(net: pypsa.Network) -> list[float]:
@@ -88,120 +93,124 @@ def compute_bbox_from_buses(net: pypsa.Network) -> list[float]:
     Compute the bounding box from the bus coordinates in a PyPSA network.
 
     Args:
-        net (pypsa.Network): The PyPSA network object containing bus coordinates.
+        net (pypsa.Network): The PyPSA network object containing bus coordinates (x, y).
 
     Returns:
-        list: A list containing the bounding box coordinates in the form [left, bottom, right, top].
+        list[float]: Bounding box coordinates in the format [left, bottom, right, top].
     """
+
+    # Extract bus coordinates
     x_min = net.buses['x'].min()
     x_max = net.buses['x'].max()
     y_min = net.buses['y'].min()
     y_max = net.buses['y'].max()
 
-    # Optional als [left, bottom, right, top]
+    # Create bounding box
     bbox = [x_min, y_min, x_max, y_max]
+
     return bbox
 
 
-def bundesland(net_buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
+def federal_state(buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
     """
-    Weist den Bussen im Netzwerk Bundesland-Daten zu.
+    Assigns federal state and regional data to network buses based on spatial proximity.
 
     Args:
-        net_buses (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
-        data (pd.DataFrame): DataFrame mit den Bundesland-Daten.
-    
+        net_buses (pd.DataFrame): DataFrame containing network bus coordinates (columns: 'x', 'y').
+        data (pd.DataFrame): DataFrame containing reference federal state and postal region data,
+                             with a 'geo_point_2d' column containing JSON strings of {"lat": ..., "lon": ...}.
+
     Returns:
-        pd.DataFrame: DataFrame mit den zugeordneten Bundesland-Daten.
+        pd.DataFrame: Updated bus DataFrame with added columns:
+                      ['lan_name', 'plz_name', 'plz_code', 'krs_code', 'lan_code', 'krs_name'].
     """
 
-    # 1. Referenzpunkte (bundesland) vorbereiten
+    # Prepare reference points (federal state data)
+    data = data.copy()
     data["geo_point_2d"] = data["geo_point_2d"].apply(json.loads)
     ref_lon = data["geo_point_2d"].apply(lambda d: d["lon"])
     ref_lat = data["geo_point_2d"].apply(lambda d: d["lat"])
     ref_points = np.vstack((ref_lon, ref_lat)).T
 
-    # 2. Zielpunkte (buses) vorbereiten
-    bus_lon = net_buses["x"]
-    bus_lat = net_buses["y"]
+    # Prepare target points (bus coordinates)
+    bus_lon = buses["x"]
+    bus_lat = buses["y"]
     bus_points = np.vstack((bus_lon, bus_lat)).T
 
-    # 3. KD-Tree bauen & Zuordnung
+    # Build KD-tree and find nearest reference point for each bus
     tree = spatial.cKDTree(ref_points)
     _, idx = tree.query(bus_points)
 
-    # Daten hinzufügen
-    zuordnen = ["lan_name", "plz_name", "plz_code", "krs_code", "lan_code", "krs_name"]
-    for spalte in zuordnen:
-        net_buses[spalte] = data.iloc[idx][spalte].values
-
-
-    return net_buses
-
-
-def zensus_ID(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
-    """
-    Ordnet den Bussen im Netzwerk die GITTER_ID_100m aus den Zensusdaten zu.
-    
-    Args:
-        buses_df (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
-        ordner (str): Der Pfad zum Ordner, der die Zensusdaten im CSV-Format enthält.
-
-    Returns:
-        pd.DataFrame: DataFrame mit den zugeordneten GITTER_ID_100m.
-    """
-
-    zensus = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
-
-    buses = buses_df
-
-    x_array, y_array = epsg4326_zu_epsg3035(buses["x"], buses["y"])
-
-    # Referenzpunkte in der Zensus-Tabelle
-    reference_points = np.vstack((zensus['x_mp_100m'], zensus['y_mp_100m'])).T
-    tree = spatial.cKDTree(reference_points)
-
-    # Zielpunkte aus dem Netz
-    query_points = np.vstack((x_array, y_array)).T
-
-    # Nächste Nachbarn finden
-    distances, indices = tree.query(query_points)
-
-
-
-    columns = np.array(zensus["GITTER_ID_100m"])[indices]
-
-    buses['GITTER_ID_100m'] = columns
+    # Assign attributes from nearest reference entry
+    cols_to_assign = ["lan_name", "plz_name", "plz_code", "krs_code", "lan_code", "krs_name"]
+    for col in cols_to_assign:
+        buses[col] = data.iloc[idx][col].values
 
     return buses
 
 
-def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
+def zensus_ID(buses: pd.DataFrame, folder: str) -> pd.DataFrame:
     """
-    Lädt Zensusdaten aus CSV-Dateien in einem angegebenen Ordner und gibt sie als DataFrame zurück.
-    
+    Assigns the 100m grid ID (GITTER_ID_100m) from census data to network buses.
+
     Args:
-        ordner (str): Der Pfad zum Ordner, der die Zensusdaten im CSV-Format enthält.
-        
+        buses_df (pd.DataFrame): DataFrame containing bus coordinates ('x', 'y').
+        folder (str): Path to the folder containing the census CSV file.
+
     Returns:
-        pd.DataFrame: Ein DataFrame, das die kombinierten Zensusdaten enthält.
+        pd.DataFrame: Updated bus DataFrame with an added 'GITTER_ID_100m' column.
     """
 
-    columns = buses_df['GITTER_ID_100m']
+    # Load zensus data
+    zensus = pd.read_csv(folder + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
+    buses = buses.copy()
+
+    # Convert bus coordinates from EPSG:4326 to EPSG:3035
+    x_array, y_array = epsg4326_zu_epsg3035(buses["x"], buses["y"])
+
+    # Build KD-tree from zensus reference points
+    reference_points = np.vstack((zensus['x_mp_100m'], zensus['y_mp_100m'])).T
+    tree = spatial.cKDTree(reference_points)
+
+    # Query points: buses in projected coordinates
+    query_points = np.vstack((x_array, y_array)).T
+
+    # Find nearest neighbors
+    distances, indices = tree.query(query_points)
+
+    # Assign GITTER_ID_100m from zensus to buses
+    buses['GITTER_ID_100m'] = np.array(zensus["GITTER_ID_100m"])[indices]
+
+    return buses
 
 
-    # Manuell laden
-    Zensus2022_Bevoelkerungszahl_100m = (pl.scan_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", separator=";")
+def load_zensus(buses: pd.DataFrame, folder: str) -> pd.DataFrame:
+    """
+    Loads census data from CSV files in the specified folder and returns them as a DataFrame.
+
+    Args:
+        buses (pd.DataFrame): DataFrame containing the network bus data, which must include the column 'GITTER_ID_100m'.
+        folder (str): Path to the folder containing the census CSV files.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the combined census data.
+    """
+
+    columns = buses['GITTER_ID_100m']
+    buses = buses.copy()
+
+    # Loading the census data from the CSV files in the specified folder
+    Zensus2022_Bevoelkerungszahl_100m = (pl.scan_csv(folder + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", separator=";")
                                          .filter(pl.col("GITTER_ID_100m")
                                                  .is_in(columns)).select("GITTER_ID_100m",
                                                                          "Einwohner").collect()
                                         )
     Zensus2022_Bevoelkerungszahl_100m = Zensus2022_Bevoelkerungszahl_100m.to_pandas()
     Zensus2022_Bevoelkerungszahl_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Bevoelkerungszahl_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Bevoelkerungszahl_100m, on="GITTER_ID_100m", how="left")
 
 
-    Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m = (pl.scan_csv(ordner + "/Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv", separator=";")
+    Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m = (pl.scan_csv(folder + "/Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "durchschnMieteQM",
@@ -209,12 +218,12 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                 )
     Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m = Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m.to_pandas()
     Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m, on="GITTER_ID_100m", how="left")
 
 
 
 
-    Zensus2022_Groesse_des_privaten_Haushalts_100m = (pl.scan_csv(ordner + "/Zensus2022_Groesse_des_privaten_Haushalts_100m-Gitter.csv", separator=";")
+    Zensus2022_Groesse_des_privaten_Haushalts_100m = (pl.scan_csv(folder + "/Zensus2022_Groesse_des_privaten_Haushalts_100m-Gitter.csv", separator=";")
                                                         .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                         .select("GITTER_ID_100m",
                                                                 "1_Person",
@@ -227,14 +236,14 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                         )
     Zensus2022_Groesse_des_privaten_Haushalts_100m = Zensus2022_Groesse_des_privaten_Haushalts_100m.to_pandas()
     Zensus2022_Groesse_des_privaten_Haushalts_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Groesse_des_privaten_Haushalts_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Groesse_des_privaten_Haushalts_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Groesse_des_privaten_Haushalts_100m, on="GITTER_ID_100m", how="left")
 
 
 
 
 
 
-    Zensus2022_Staatsangehoerigkeit_Gruppen_100m = (pl.scan_csv(ordner + "/Zensus2022_Staatsangehoerigkeit_Gruppen_100m-Gitter.csv", separator=";")
+    Zensus2022_Staatsangehoerigkeit_Gruppen_100m = (pl.scan_csv(folder + "/Zensus2022_Staatsangehoerigkeit_Gruppen_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "EU27_Land",
@@ -242,10 +251,10 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                     )
     Zensus2022_Staatsangehoerigkeit_Gruppen_100m = Zensus2022_Staatsangehoerigkeit_Gruppen_100m.to_pandas()
     Zensus2022_Staatsangehoerigkeit_Gruppen_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Staatsangehoerigkeit_Gruppen_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Staatsangehoerigkeit_Gruppen_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Staatsangehoerigkeit_Gruppen_100m, on="GITTER_ID_100m", how="left")
 
 
-    Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m = (pl.scan_csv(ordner + "/Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m-Gitter.csv", separator=";")
+    Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m = (pl.scan_csv(folder + "/Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m-Gitter.csv", separator=";")
                                                             .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                             .select("GITTER_ID_100m",
                                                                     "Ehep_Kinder_ab18",
@@ -254,13 +263,13 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                             )
     Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m = Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m.to_pandas()
     Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Typ_der_Kernfamilie_nach_Kindern_100m, on="GITTER_ID_100m", how="left")
 
 
 
 
 
-    Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m = (pl.scan_csv(ordner + "/Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m-Gitter.csv", separator=";")
+    Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m = (pl.scan_csv(folder + "/Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "30bis39",
@@ -269,9 +278,9 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                 )
     Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m = Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m.to_pandas()
     Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Flaeche_der_Wohnung_10m2_Intervalle_100m, on="GITTER_ID_100m", how="left")
 
-    Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m = (pl.scan_csv(ordner + "/Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m-Gitter.csv", separator=";")
+    Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m = (pl.scan_csv(folder + "/Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "Freist_ZFH",
@@ -279,16 +288,11 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                 )
     Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m = Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m.to_pandas()
     Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Wohnung_Gebaeudetyp_Groesse_100m, on="GITTER_ID_100m", how="left")
 
 
 
-    """
-    Baujahr hatte Gitter_ID_100M !!!!
-    in csv geändert
-    """
-
-    Zensus2022_Baujahr_JZ_100m = (pl.scan_csv(ordner + "/Zensus2022_Baujahr_JZ_100m-Gitter.csv", separator=";")
+    Zensus2022_Baujahr_JZ_100m = (pl.scan_csv(folder + "/Zensus2022_Baujahr_JZ_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "Vor1919",
@@ -297,10 +301,10 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                 )
     Zensus2022_Baujahr_JZ_100m = Zensus2022_Baujahr_JZ_100m.to_pandas()
     Zensus2022_Baujahr_JZ_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Baujahr_JZ_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Baujahr_JZ_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Baujahr_JZ_100m, on="GITTER_ID_100m", how="left")
 
 
-    Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m = (pl.scan_csv(ordner + "/Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m-Gitter.csv", separator=";")
+    Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m = (pl.scan_csv(folder + "/Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "1_Wohnung",
@@ -312,9 +316,10 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                 )
     Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m = Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m.to_pandas()
     Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Gebaeude_nach_Anzahl_der_Wohnungen_100m, on="GITTER_ID_100m", how="left")
 
-    Zensus2022_Geb_Gebaeudetyp_Groesse_100m = (pl.scan_csv(ordner + "/Zensus2022_Geb_Gebaeudetyp_Groesse_100m-Gitter.csv", separator=";")
+
+    Zensus2022_Geb_Gebaeudetyp_Groesse_100m = (pl.scan_csv(folder + "/Zensus2022_Geb_Gebaeudetyp_Groesse_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "FreiEFH",
@@ -325,11 +330,11 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                            "FreiEFH": "Geb_FreiEFH",
                                                         }, inplace=True)
     Zensus2022_Geb_Gebaeudetyp_Groesse_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Geb_Gebaeudetyp_Groesse_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Geb_Gebaeudetyp_Groesse_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Geb_Gebaeudetyp_Groesse_100m, on="GITTER_ID_100m", how="left")
 
 
 
-    Zensus2022_Energietraeger_100m = (pl.scan_csv(ordner + "/Zensus2022_Energietraeger_100m-Gitter_utf8.csv", separator=";")
+    Zensus2022_Energietraeger_100m = (pl.scan_csv(folder + "/Zensus2022_Energietraeger_100m-Gitter_utf8.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "Gas",
@@ -339,10 +344,10 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                                 )
     Zensus2022_Energietraeger_100m = Zensus2022_Energietraeger_100m.to_pandas()
     Zensus2022_Energietraeger_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Energietraeger_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Energietraeger_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Energietraeger_100m, on="GITTER_ID_100m", how="left")
 
 
-    Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m = (pl.scan_csv(ordner + "/Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m-Gitter.csv", separator=";")
+    Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m = (pl.scan_csv(folder + "/Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "Holz_Holzpellets",
@@ -357,10 +362,9 @@ def zensus_laden(buses_df: pd.DataFrame, ordner: str) -> pd.DataFrame:
                                            "Fernwaerme": "Geb_Fernwaerme",
                                                         }, inplace=True)
     Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m.rename(columns={col: f"Zensus_{col}" for col in Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m.columns if col != "GITTER_ID_100m"}, inplace=True)
-    buses_df = buses_df.merge(Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m, on="GITTER_ID_100m", how="left")
+    buses = buses.merge(Zensus2022_Gebaeude_nach_Energietraeger_der_Heizung_100m, on="GITTER_ID_100m", how="left")
 
-    
-    return buses_df
+    return buses
 
 
 def epsg4326_zu_epsg3035(lon: float, lat: float) -> tuple[float, float] :
@@ -379,105 +383,105 @@ def epsg4326_zu_epsg3035(lon: float, lat: float) -> tuple[float, float] :
     rechtswert, hochwert = transformer_zu_EPSG3035.transform(lon, lat)
     return rechtswert, hochwert
 
-def epsg32632_zu_epsg3035(lon: float, lat: float) -> tuple[float, float]:
-    """
-    Umrechnung von WGS84 (EPSG:32632) zu ETRS89 (EPSG:3035)
-    Args:
-        lon (float or pd.Series): Längengrad in WGS84.
-        lat (float or pd.Series): Breitengrad in WGS84.
+# def epsg32632_zu_epsg3035(lon: float, lat: float) -> tuple[float, float]:
+#     """
+#     Umrechnung von WGS84 (EPSG:32632) zu ETRS89 (EPSG:3035)
+#     Args:
+#         lon (float or pd.Series): Längengrad in WGS84.
+#         lat (float or pd.Series): Breitengrad in WGS84.
     
-    Returns:
-        tuple: Ein Tupel mit den umgerechneten Koordinaten (rechtswert, hochwert) in ETRS89 (EPSG:3035).
-    """
+#     Returns:
+#         tuple: Ein Tupel mit den umgerechneten Koordinaten (rechtswert, hochwert) in ETRS89 (EPSG:3035).
+#     """
 
-    transformer_zu_EPSG3035 = Transformer.from_crs("EPSG:32632", "EPSG:3035", always_xy=True)
-    rechtswert, hochwert = transformer_zu_EPSG3035.transform(lon, lat)
-    return rechtswert, hochwert
+#     transformer_zu_EPSG3035 = Transformer.from_crs("EPSG:32632", "EPSG:3035", always_xy=True)
+#     rechtswert, hochwert = transformer_zu_EPSG3035.transform(lon, lat)
+#     return rechtswert, hochwert
 
 
-def zensus_df_verbinden(daten_zensus: list) -> pd.DataFrame:
-    """
-    Verbindet mehrere DataFrames basierend auf der GITTER_ID_100m Spalte.
+# def zensus_df_verbinden(daten_zensus: list) -> pd.DataFrame:
+#     """
+#     Verbindet mehrere DataFrames basierend auf der GITTER_ID_100m Spalte.
     
-    Args:
-        daten_zensus (list): Eine Liste von DataFrames, die auf GITTER_ID_100m basieren.
+#     Args:
+#         daten_zensus (list): Eine Liste von DataFrames, die auf GITTER_ID_100m basieren.
 
-    Returns:
-        pd.DataFrame: Ein DataFrame, das die Daten aus allen DataFrames kombiniert.
-    """
+#     Returns:
+#         pd.DataFrame: Ein DataFrame, das die Daten aus allen DataFrames kombiniert.
+#     """
 
-    # Sicherstellen, dass alle DFs die gleichen drei Schlüsselspalten haben
-    basis_spalten = ["GITTER_ID_100m", "x_mp_100m", "y_mp_100m"]
+#     # Sicherstellen, dass alle DFs die gleichen drei Schlüsselspalten haben
+#     basis_spalten = ["GITTER_ID_100m", "x_mp_100m", "y_mp_100m"]
 
-    # DataFrames per GITTER_ID_100m zusammenführen
-    df_vereint = reduce(lambda left, right: pd.merge(left, right, on=basis_spalten, how='outer'), daten_zensus)
-    df_vereint = df_vereint.rename(columns={col: f"Zensus_{col}" for col in df_vereint.columns if col not in basis_spalten})
-    return df_vereint
-
-
+#     # DataFrames per GITTER_ID_100m zusammenführen
+#     df_vereint = reduce(lambda left, right: pd.merge(left, right, on=basis_spalten, how='outer'), daten_zensus)
+#     df_vereint = df_vereint.rename(columns={col: f"Zensus_{col}" for col in df_vereint.columns if col not in basis_spalten})
+#     return df_vereint
 
 
-def daten_zuordnen(net_buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Ordnet die Zensusdaten den Bussen im Netzwerk zu, basierend auf den Koordinaten.
+
+
+# def daten_zuordnen(net_buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Ordnet die Zensusdaten den Bussen im Netzwerk zu, basierend auf den Koordinaten.
     
-    Args:
-        net_buses (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
-        data (pd.DataFrame): DataFrame mit den Zensusdaten.
+#     Args:
+#         net_buses (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
+#         data (pd.DataFrame): DataFrame mit den Zensusdaten.
         
-    Returns:
-        pd.DataFrame: DataFrame mit den zugeordneten Zensusdaten.
-    """
+#     Returns:
+#         pd.DataFrame: DataFrame mit den zugeordneten Zensusdaten.
+#     """
 
-    x_array, y_array = epsg4326_zu_epsg3035(net_buses["x"], net_buses["y"])
+#     x_array, y_array = epsg4326_zu_epsg3035(net_buses["x"], net_buses["y"])
 
-    # Referenzpunkte in der Zensus-Tabelle
-    reference_points = np.vstack((data['x_mp_100m'].values, data['y_mp_100m'].values)).T
-    tree = spatial.cKDTree(reference_points)
+#     # Referenzpunkte in der Zensus-Tabelle
+#     reference_points = np.vstack((data['x_mp_100m'].values, data['y_mp_100m'].values)).T
+#     tree = spatial.cKDTree(reference_points)
 
-    # Zielpunkte aus dem Netz
-    query_points = np.vstack((x_array, y_array)).T
+#     # Zielpunkte aus dem Netz
+#     query_points = np.vstack((x_array, y_array)).T
 
-    # Nächste Nachbarn finden
-    distances, indices = tree.query(query_points)
+#     # Nächste Nachbarn finden
+#     distances, indices = tree.query(query_points)
 
-    # Spaltennamen ändern
-    # data = data.rename(columns=lambda col: f"Zensus_{col}").copy()
+#     # Spaltennamen ändern
+#     # data = data.rename(columns=lambda col: f"Zensus_{col}").copy()
     
-    # Passende Zeilen aus data holen
-    matched_data = data.iloc[indices].copy()
+#     # Passende Zeilen aus data holen
+#     matched_data = data.iloc[indices].copy()
 
-    # Index an net_buses anpassen, damit concat funktioniert
-    matched_data.index = net_buses.index
+#     # Index an net_buses anpassen, damit concat funktioniert
+#     matched_data.index = net_buses.index
 
-    # DataFrames nebeneinander anfügen
-    result = pd.concat([net_buses, matched_data], axis=1)
+#     # DataFrames nebeneinander anfügen
+#     result = pd.concat([net_buses, matched_data], axis=1)
 
-    return result
+#     return result
 
 
 
-def load_shapes(datei: str, bundesland: str) -> gpd.GeoDataFrame:
-    """
-    Lädt die Bundesland-Geometrien aus einer GeoJSON-Datei und filtert sie auf die relevanten Bundesländer.
-    Args:
-        datei (str): Pfad zur GeoJSON-Datei mit den Bundesland-Geometrien.
+# def load_shapes(datei: str, bundesland: str) -> gpd.GeoDataFrame:
+#     """
+#     Lädt die Bundesland-Geometrien aus einer GeoJSON-Datei und filtert sie auf die relevanten Bundesländer.
+#     Args:
+#         datei (str): Pfad zur GeoJSON-Datei mit den Bundesland-Geometrien.
         
-    Returns:
-        gpd.GeoDataFrame: Ein GeoDataFrame mit den Geometrien der relevanten Bundesländer.
-    """
+#     Returns:
+#         gpd.GeoDataFrame: Ein GeoDataFrame mit den Geometrien der relevanten Bundesländer.
+#     """
 
-    # Laden der Geometrien aus der Datei
-    shapes = gpd.read_file(datei, layer="vg5000_lan")
+#     # Laden der Geometrien aus der Datei
+#     shapes = gpd.read_file(datei, layer="vg5000_lan")
     
-    # Filtern der Geometrien nach Bundesländern
-    land = shapes[shapes["GEN"].isin([bundesland])]
-    # Filtern der Geometrien
-    land_aggregiert = land.dissolve(by="GEN")
-    land_umrisse = land_aggregiert[["geometry"]]
-    land_3035 = land_umrisse.to_crs(epsg=3035)
+#     # Filtern der Geometrien nach Bundesländern
+#     land = shapes[shapes["GEN"].isin([bundesland])]
+#     # Filtern der Geometrien
+#     land_aggregiert = land.dissolve(by="GEN")
+#     land_umrisse = land_aggregiert[["geometry"]]
+#     land_3035 = land_umrisse.to_crs(epsg=3035)
 
-    return land_3035
+#     return land_3035
 
 
 # def sum_mw(df):
@@ -507,392 +511,359 @@ def load_shapes(datei: str, bundesland: str) -> gpd.GeoDataFrame:
 
 
 
-def bundesland_zuordnung(ordner: str, shapes: gpd.GeoDataFrame) -> pd.DataFrame:
+# def bundesland_zuordnung(ordner: str, shapes: gpd.GeoDataFrame) -> pd.DataFrame:
+#     """
+#     Ordnet die Zensusdaten den Bundesländern zu, basierend auf den Geometrien der Bundesländer.
+#     Args:
+#         zensus (pd.DataFrame): DataFrame mit den Zensusdaten.
+#         shapes (gpd.GeoDataFrame): GeoDataFrame mit den Geometrien der Bundesländer.
+        
+#     Returns:
+#         pd.DataFrame: Ein DataFrame mit den zugeordneten Bundesland-Daten."""
+
+#     # Zensusdaten laden
+#     zensus = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
+    
+#     # Punkte-Geometrie erstellen
+#     geometry = gpd.GeoSeries(gpd.points_from_xy(zensus['x_mp_100m'], zensus['y_mp_100m']))
+    
+#     # Boolean-Maske: welche Punkte liegen innerhalb der Bundesländer
+#     mask = geometry.within(shapes.unary_union)
+    
+#     # Nur diese Zeilen auswählen
+#     zensus_filtered = zensus[mask].copy()
+
+#     gitter_id = zensus_filtered["GITTER_ID_100m"]
+
+#     return gitter_id
+
+
+
+# def bundesland_summieren(df: pd.DataFrame, bundesland: str) -> pd.DataFrame:
+#     """
+#     Summiert die Zensusdaten für ein bestimmtes Bundesland.
+    
+#     Args:
+#         df (pd.DataFrame): DataFrame mit den Zensusdaten.
+#         bundesland (str): Der Name des Bundeslands, für das die Daten summiert werden
+        
+#     Returns:
+#         pd.DataFrame: Ein DataFrame mit den summierten Zensusdaten für das Bundesland
+#     """
+
+    
+#     numerische_spalten = [col for col in df.columns if col.startswith("Zensus")]
+
+#     for col in numerische_spalten:
+#         # Komma durch Punkt ersetzen, Strings in float konvertieren
+#         df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
+#         # Ungültige Zeichen wie "–" in NaN umwandeln
+#         df[col] = pd.to_numeric(df[col], errors="coerce")
+#         # NaN durch 0 ersetzen
+#         df[col] = df[col].fillna(0)
+
+#     print(df)
+#     df_agg = df[numerische_spalten].agg(agg_dict)
+#     df_neu = pd.DataFrame()
+#     df_neu[bundesland] = df_agg
+
+#     return df_neu
+
+
+# def gewichtungsfaktor(land: str, kategorien_eigenschaften: pd.DataFrame, factors: dict, row: pd.Series, technik_faktoren: pd.Series, gesamtgewicht_dict: dict) -> float:
+#     """
+#     Berechnet den Gewichtungsfaktor für eine bestimmte Technik und ein bestimmtes Land basierend auf den Eigenschaften und Faktoren.
+    
+#     Args:
+#         land (str): Der Name des Landes, für das der Faktor berechnet wird.
+#         kategorien_eigenschaften (pd.DataFrame): DataFrame mit den Kategorien der Eigenschaften.
+#         factors (dict): Dictionary mit den Faktoren für jede Kategorie.
+#         row (pd.Series): Eine Zeile des DataFrames, die die Eigenschaften enthält.
+#         technik_faktoren (pd.Series): Serie mit den Technik-Faktoren für das Land.
+#         gesamtgewicht_dict (dict): Dictionary mit den Gesamtgewichten für jede Kategorie und Land.
+        
+#     Returns:
+#         float: Der berechnete Gewichtungsfaktor für die Technik im angegebenen Land.
+#     """
+
+#     weighted_sum = 1.0
+#     # Iteriere über die Kategorien
+#     for kat in kategorien_eigenschaften.columns:
+#         # Filtere die Eigenschaften für die aktuelle Kategorie
+#         eigenschaften = kategorien_eigenschaften[kat].dropna()
+
+#         # hole nur die relevanten Faktoren und Werte
+#         faktoren_kat = [factors[attr] for attr in eigenschaften]
+#         werte_kat = row[eigenschaften]
+
+#         # numerische Multiplikation
+#         sum_bus = (werte_kat * faktoren_kat).sum()
+#         sum_land = gesamtgewicht_dict.get((land, kat), 0)
+
+#         # Berechnung von Gewichtungsprodukt
+#         if sum_land != 0:
+#             weighted_sum *= sum_bus / sum_land
+#         else:
+#             weighted_sum *= 0
+
+#     print("Technik Faktoren:", technik_faktoren)
+
+#     return weighted_sum * float(technik_faktoren.iloc[0])
+
+
+
+
+# def calculate_factors(df: pd.DataFrame, factors: dict, kategorien_eigenschaften: pd.DataFrame, Bev_data: pd.DataFrame, technik: str) -> pd.DataFrame:
+
+#     """
+#     Berechnet den Faktor für jede Zeile im DataFrame basierend auf den Eigenschaften und Bevölkerungsdaten.
+
+#     Parameters:
+#         df (pd.DataFrame): DataFrame mit den Eigenschaften der Busse.
+#         factors (dict): Dictionary mit den Faktoren für die Eigenschaften.
+#         kategorien_eigenschaften (pd.DataFrame): DataFrame mit den Eigenschaften, die gefiltert werden sollen.
+#         Bev_data (pd.DataFrame): DataFrame mit den Bevölkerungsdaten.
+#         technik (str): Technik, für die der Faktor berechnet werden soll.
+
+#     Returns:
+#         pd.DataFrame: DataFrame mit den berechneten Faktoren für die jeweilige Technik.
+#     """
+
+#     #Bev_data = Bev_data.set_index('GEN')
+#     #  Extrahiere die Technik-Faktoren für jedes Bundesland -> verhindert mehrfaches Suchen in For Loop
+#     technik_faktoren = Bev_data[technik]
+
+#     # Dictionary für die Gesamtgewichte -> verhindert mehrfaches Suchen in For Loop
+#     gesamtgewicht_dict = {}
+#     for kat in kategorien_eigenschaften.columns:
+#         eigenschaften = kategorien_eigenschaften[kat].dropna()
+#         faktoren_kat = [factors[attr] for attr in eigenschaften]
+        
+#         for land in Bev_data.index:
+#             land_werte = Bev_data.loc[land, eigenschaften]
+#             gewicht = (land_werte * faktoren_kat).sum()
+#             gesamtgewicht_dict[(land, kat)] = gewicht
+
+#     # Leeres DataFrame mit Zeilen wie df, für jedes Land eine Spalte
+#     faktor_pro_bus = pd.Series(index=df.index, dtype=float)
+
+#     # Iteriere über jeden Bus im DataFrame
+#     for idx, row in df.iterrows():
+#         land = row['lan_name']
+
+#         faktor_pro_bus.at[idx] = gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_faktoren, gesamtgewicht_dict)
+
+
+#     # Berechnung für Bundesland
+#     summen = df.iloc[:, 1:].agg(agg_dict)
+#     erste_spalte = {df.columns[0]: df.iloc[0, 0]}
+#     neue_zeile = {**erste_spalte, **summen.to_dict()}    
+#     zeile = pd.DataFrame([neue_zeile])
+
+#     land_bbox = zeile.iloc[0]['lan_name']
+#     faktor_bbox = gewichtungsfaktor(land_bbox, kategorien_eigenschaften, factors, zeile.iloc[0], technik_faktoren, gesamtgewicht_dict)
+
+#     return faktor_pro_bus, faktor_bbox
+
+
+
+def permission(buses: pd.DataFrame, pfad: str) -> pd.DataFrame:
     """
-    Ordnet die Zensusdaten den Bundesländern zu, basierend auf den Geometrien der Bundesländer.
+    Assigns each bus in the network its corresponding 5 km grid ID based on registration district data.
+    
     Args:
-        zensus (pd.DataFrame): DataFrame mit den Zensusdaten.
-        shapes (gpd.GeoDataFrame): GeoDataFrame mit den Geometrien der Bundesländer.
+        buses (pd.DataFrame): DataFrame containing the bus data of the network.
+        path (str): Path to the directory containing the GeoJSON file with the 5 km grid or registration zone data.
         
     Returns:
-        pd.DataFrame: Ein DataFrame mit den zugeordneten Bundesland-Daten."""
-
-    # Zensusdaten laden
-    zensus = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
-    
-    # Punkte-Geometrie erstellen
-    geometry = gpd.GeoSeries(gpd.points_from_xy(zensus['x_mp_100m'], zensus['y_mp_100m']))
-    
-    # Boolean-Maske: welche Punkte liegen innerhalb der Bundesländer
-    mask = geometry.within(shapes.unary_union)
-    
-    # Nur diese Zeilen auswählen
-    zensus_filtered = zensus[mask].copy()
-
-    gitter_id = zensus_filtered["GITTER_ID_100m"]
-
-    return gitter_id
-
-
-
-def bundesland_summieren(df: pd.DataFrame, bundesland: str) -> pd.DataFrame:
+        pd.Series: A pandas Series containing the 'Schluessel_Zulbz' ID (registration district key) for each bus.
     """
-    Summiert die Zensusdaten für ein bestimmtes Bundesland.
-    
-    Args:
-        df (pd.DataFrame): DataFrame mit den Zensusdaten.
-        bundesland (str): Der Name des Bundeslands, für das die Daten summiert werden
-        
-    Returns:
-        pd.DataFrame: Ein DataFrame mit den summierten Zensusdaten für das Bundesland
-    """
-
-    
-    numerische_spalten = [col for col in df.columns if col.startswith("Zensus")]
-
-    for col in numerische_spalten:
-        # Komma durch Punkt ersetzen, Strings in float konvertieren
-        df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
-        # Ungültige Zeichen wie "–" in NaN umwandeln
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-        # NaN durch 0 ersetzen
-        df[col] = df[col].fillna(0)
-
-    print(df)
-    df_agg = df[numerische_spalten].agg(agg_dict)
-    df_neu = pd.DataFrame()
-    df_neu[bundesland] = df_agg
-
-    return df_neu
-
-
-def gewichtungsfaktor(land: str, kategorien_eigenschaften: pd.DataFrame, factors: dict, row: pd.Series, technik_faktoren: pd.Series, gesamtgewicht_dict: dict) -> float:
-    """
-    Berechnet den Gewichtungsfaktor für eine bestimmte Technik und ein bestimmtes Land basierend auf den Eigenschaften und Faktoren.
-    
-    Args:
-        land (str): Der Name des Landes, für das der Faktor berechnet wird.
-        kategorien_eigenschaften (pd.DataFrame): DataFrame mit den Kategorien der Eigenschaften.
-        factors (dict): Dictionary mit den Faktoren für jede Kategorie.
-        row (pd.Series): Eine Zeile des DataFrames, die die Eigenschaften enthält.
-        technik_faktoren (pd.Series): Serie mit den Technik-Faktoren für das Land.
-        gesamtgewicht_dict (dict): Dictionary mit den Gesamtgewichten für jede Kategorie und Land.
-        
-    Returns:
-        float: Der berechnete Gewichtungsfaktor für die Technik im angegebenen Land.
-    """
-
-    weighted_sum = 1.0
-    # Iteriere über die Kategorien
-    for kat in kategorien_eigenschaften.columns:
-        # Filtere die Eigenschaften für die aktuelle Kategorie
-        eigenschaften = kategorien_eigenschaften[kat].dropna()
-
-        # hole nur die relevanten Faktoren und Werte
-        faktoren_kat = [factors[attr] for attr in eigenschaften]
-        werte_kat = row[eigenschaften]
-
-        # numerische Multiplikation
-        sum_bus = (werte_kat * faktoren_kat).sum()
-        sum_land = gesamtgewicht_dict.get((land, kat), 0)
-
-        # Berechnung von Gewichtungsprodukt
-        if sum_land != 0:
-            weighted_sum *= sum_bus / sum_land
-        else:
-            weighted_sum *= 0
-
-    print("Technik Faktoren:", technik_faktoren)
-
-    return weighted_sum * float(technik_faktoren.iloc[0])
-
-
-
-
-def calculate_factors(df: pd.DataFrame, factors: dict, kategorien_eigenschaften: pd.DataFrame, Bev_data: pd.DataFrame, technik: str) -> pd.DataFrame:
-
-    """
-    Berechnet den Faktor für jede Zeile im DataFrame basierend auf den Eigenschaften und Bevölkerungsdaten.
-
-    Parameters:
-        df (pd.DataFrame): DataFrame mit den Eigenschaften der Busse.
-        factors (dict): Dictionary mit den Faktoren für die Eigenschaften.
-        kategorien_eigenschaften (pd.DataFrame): DataFrame mit den Eigenschaften, die gefiltert werden sollen.
-        Bev_data (pd.DataFrame): DataFrame mit den Bevölkerungsdaten.
-        technik (str): Technik, für die der Faktor berechnet werden soll.
-
-    Returns:
-        pd.DataFrame: DataFrame mit den berechneten Faktoren für die jeweilige Technik.
-    """
-
-    #Bev_data = Bev_data.set_index('GEN')
-    #  Extrahiere die Technik-Faktoren für jedes Bundesland -> verhindert mehrfaches Suchen in For Loop
-    technik_faktoren = Bev_data[technik]
-
-    # Dictionary für die Gesamtgewichte -> verhindert mehrfaches Suchen in For Loop
-    gesamtgewicht_dict = {}
-    for kat in kategorien_eigenschaften.columns:
-        eigenschaften = kategorien_eigenschaften[kat].dropna()
-        faktoren_kat = [factors[attr] for attr in eigenschaften]
-        
-        for land in Bev_data.index:
-            land_werte = Bev_data.loc[land, eigenschaften]
-            gewicht = (land_werte * faktoren_kat).sum()
-            gesamtgewicht_dict[(land, kat)] = gewicht
-
-    # Leeres DataFrame mit Zeilen wie df, für jedes Land eine Spalte
-    faktor_pro_bus = pd.Series(index=df.index, dtype=float)
-
-    # Iteriere über jeden Bus im DataFrame
-    for idx, row in df.iterrows():
-        land = row['lan_name']
-
-        faktor_pro_bus.at[idx] = gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_faktoren, gesamtgewicht_dict)
-
-
-    # Berechnung für Bundesland
-    summen = df.iloc[:, 1:].agg(agg_dict)
-    erste_spalte = {df.columns[0]: df.iloc[0, 0]}
-    neue_zeile = {**erste_spalte, **summen.to_dict()}    
-    zeile = pd.DataFrame([neue_zeile])
-
-    land_bbox = zeile.iloc[0]['lan_name']
-    faktor_bbox = gewichtungsfaktor(land_bbox, kategorien_eigenschaften, factors, zeile.iloc[0], technik_faktoren, gesamtgewicht_dict)
-
-    return faktor_pro_bus, faktor_bbox
-
-
-
-def zulassung(net_buses: pd.DataFrame, pfad: str) -> pd.DataFrame:
-    """
-    Ordnet den Bussen im Netzwerk die ID_5km aus den 5km Rasterdaten zu.
-    
-    Args:
-        net_buses (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
-        
-    Returns:
-        pd.DataFrame: DataFrame mit den zugeordneten ID_5km.
-    """
-
 
     data = gpd.read_file(f"{pfad}/input/FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson")
 
-    # Bus Koordinaten in GeoDataFrame umwandeln
-    gdf_buses = gpd.GeoDataFrame(net_buses.copy(), geometry=gpd.points_from_xy(net_buses["x"], net_buses["y"]), crs=data.crs)
+    # Convert bus coordinates into a GeoDataFrame
+    gdf_buses = gpd.GeoDataFrame(buses.copy(), geometry=gpd.points_from_xy(buses["x"], buses["y"]), crs=data.crs)
 
-    # Shape, Punkt Join
+    # Perform spatial join (find which district each bus is located in)
     gdf_joined = gpd.sjoin(gdf_buses, data[["Schluessel_Zulbz", "geometry"]], how="left", predicate="within")
-    print("gdf_joined:", gdf_joined)
-    # Duplikate droppen
+
+    # Drop duplicate indices to keep only unique bus entries
     gdf_joined = gdf_joined[~gdf_joined.index.duplicated(keep='first')]
-    # ID filtern für jeden Bus
+
+    # Extract the registration district ID for each bus
     id = gdf_joined["Schluessel_Zulbz"].copy()
 
     return id
 
 
-def faktoren(buses_zensus: pd.DataFrame, Technik_Faktoren: pd.DataFrame, Bev_data: pd.DataFrame, bbox_zensus: pd.Series, technik: str, id_df: pd.Series) -> tuple[pd.Series, float]:
-        """
-        Berechnet die Faktoren für die Busse und das Bounding Box basierend auf den Zensusdaten und Bevölkerungsdaten.
-        
-        Args:
-            buses_zensus (pd.DataFrame): DataFrame mit den Zensusdaten der Busse.
-            Technik_Faktoren (pd.DataFrame): DataFrame mit den Technik-Faktoren.
-            Bev_data (pd.DataFrame): DataFrame mit den Bevölkerungsdaten.
-            bbox_zensus (pd.Series): Serie mit den Zensusdaten der Bounding Box.
-            technik (str): Die Technik, für die die Faktoren berechnet werden.
-            id_df (pd.Series): Serie mit den IDs der Busse.
-
-        Returns:
-            tuple: Ein Tupel mit zwei Elementen:
-                - pd.Series: Serie mit den berechneten Faktoren für die Busse.
-                - float: Der berechnete Faktor für die Bounding Box.
-        """
-
-
-        arr_factor = pd.Series(0.0, index=buses_zensus.index)
-        #land = buses_land.iloc[0, 0]
-        Bev_data_Zensus = Bev_data[[col for col in Bev_data.columns if col.startswith("Zensus")]].copy()
-        
-        '''
-        Auf Cluster unnötig
-        '''
-        print('Technik: ', technik)
-        print("Bev_data_Zensus.columns vor:", Bev_data_Zensus.columns)
-        print("Technik_Faktoren.columns vor:", Technik_Faktoren.columns)
-        Bev_data_Zensus = Bev_data_Zensus[list(Technik_Faktoren.columns)]
-        buses_zensus = buses_zensus[list(Technik_Faktoren.columns)]
-
-        Bev_data_Technik = Bev_data[technik].copy()
-        id = id_df.iloc[0]
-        factor_area = Bev_data_Zensus.loc[id] @ Technik_Faktoren.loc[technik]
-        for j, zensus in buses_zensus.iterrows():
-            id = id_df.loc[j]
-            factor_bus = zensus @ Technik_Faktoren.loc[technik]
-            if factor_bus < 0:
-                factor_bus = 0
-            arr_factor.loc[j] = factor_bus / factor_area * Bev_data_Technik.loc[id]
-
-        factor_bbox = bbox_zensus @ Technik_Faktoren.loc[technik] / factor_area * Bev_data_Technik.loc[id]
-        if factor_bbox < 0:
-            factor_bbox = 0
-        return arr_factor, factor_bbox
-        
-
-
-def technik_sortieren(buses: pd.DataFrame, Technik: str, amount_total: float, solar_power: float) -> pd.DataFrame:
+def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame, bbox_zensus: pd.Series, technik: str, id_df: pd.Series) -> tuple[pd.Series, float]:
     """
-    Sortiert die Busse nach der Technik und verteilt die Leistung gleichmäßig auf die Busse
+    Calculates technology distribution factors for buses and the bounding box 
+    based on census and population data.
     
     Args:
-        buses (pd.DataFrame): DataFrame mit den Busdaten.
-        Technik (str): Die Technik, die verteilt werden soll.
-        amount_total (float): Die gesamte Anzahl, die verteilt werden soll.
-        solar_power (float): Die installierte Solarleistung für die PLZ.
+        buses_zensus (pd.DataFrame): DataFrame containing census-related data for each bus.
+        gcp_factors (pd.DataFrame): DataFrame with technology weighting factors for each census attribute.
+        Bev_data (pd.DataFrame): DataFrame containing population data and associated census identifiers.
+        bbox_zensus (pd.Series): Series with aggregated census data for the bounding box area.
+        technik (str): The technology for which factors are to be calculated.
+        id_df (pd.Series): Series mapping each bus to its census region ID.
 
     Returns:
-        pd.DataFrame: DataFrame mit den verteilten Leistungen für die Technik.
+        tuple:
+            - pd.Series: A Series containing the calculated technology factors for each bus.
+            - float: The calculated factor for the bounding box.
     """
 
-    # Neue Spalte vorbereiten
-    buses['Power_' + Technik] = 0.0  # Initialisierung mit 0
+    # Initialize Series for bus factors
+    arr_factor = pd.Series(0.0, index=buses.index)
 
-    # buses nach Faktor gruppieren und als dict sortiert speichern
-    buses_grouped = buses.groupby('Factor_'+Technik)
+    # Filter population data for zensus-related columns
+    data_zensus = data[[col for col in data.columns if col.startswith("Zensus")]].copy()
+
+    # Align data columns with technology factor structure
+    data_zensus = data_zensus[list(gcp_factors.columns)]
+    buses = buses[list(gcp_factors.columns)]
+
+    # Extract technology-specific population data
+    data_gcp = data[technik].copy()
+    # Compute factor for the area
+    id = id_df.iloc[0]
+    factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
+
+    # Calculate factors for each bus
+    for j, zensus in buses.iterrows():
+        id = id_df.loc[j]
+        factor_bus = zensus @ gcp_factors.loc[technik]
+        if factor_bus < 0:
+            factor_bus = 0
+        arr_factor.loc[j] = factor_bus / factor_area * data_gcp.loc[id]
+
+    # Compute factor for the bounding box
+    factor_bbox = bbox_zensus @ gcp_factors.loc[technik] / factor_area * data_gcp.loc[id]
+    if factor_bbox < 0:
+        factor_bbox = 0
+    
+    return arr_factor, factor_bbox
+        
+
+
+def sort_gcp(buses: pd.DataFrame, gcp: str, amount_total: float, solar_power: float) -> pd.DataFrame:
+    """
+    Distributes a given technology (e.g., solar, heat pump, e-car) across buses 
+    in the network based on their factor values.
+
+    Args:
+        buses (pd.DataFrame): DataFrame containing bus data.
+        gcp (str): The technology to be distributed (e.g., "solar", "HP", "E_car").
+        amount_total (float): The total number or capacity to be distributed among buses.
+        solar_power (float): The installed solar capacity (in kW) for the postal code area.
+
+    Returns:
+        pd.DataFrame: Updated DataFrame with the distributed technology power assigned.
+    """
+
+    # Initialize column for technology power
+    buses['Power_' + gcp] = 0.0  # Initialisierung mit 0
+
+    # Group buses by their gcp factor (e.g., Factor_solar) and sort descending
+    buses_grouped = buses.groupby('Factor_' + gcp)
     groups_dict = {key: group for key, group in sorted(buses_grouped, key=lambda x: x[0], reverse=True)}
 
-    #print("groups_dict:", groups_dict)
-
-    # Series zum späteren gemeinsamen Hinzufügen
+    # Temporary Series to collect power values
     power_col = pd.Series(0.0, index=buses.index)
 
-    if Technik == 'solar' and "type_1" in buses.columns:
-        print("Jetzt solar von type_1 übernehmen")
-        # Allen buses mit type_1 == Technik solar_power zuordnen
-        mask_type1 = buses["type_1"] == Technik
-        #print("mask_type1:", mask_type1)
-
-
+    # Handle case where solar data already exists (from MaStR or similar)
+    if gcp == 'solar' and "type_1" in buses.columns:
+        mask_type1 = buses["type_1"] == gcp
         power_col.loc[mask_type1] = solar_power
-        # buses.loc[mask_type1, 'Power_' + Technik] = solar_power
 
-
-        '''
-        Passt die p_nom_1 größe zu den Daten aus dem MArktstammdatenregister, oder übernehmen wir nur
-        dass dort eine pv ist, aber größe setzen wir selbst?
-        '''
-
-        # Bestimmung der Anzahl der gesetzten solaranlagen
+        # Count already assigned solar units and adjust total amount
         amount = mask_type1.sum()
 
-        # Reduzieren von amount_total um die schon vorhandene Leistung
+        # Reduce amount_total by the already existing capacity
         amount_total -= amount
 
-        # Wenn schon genug Solaranlagen vorhanden sind, abbrechen
+        # If no more solar units to distribute, return early
         if amount_total <= 0:
-            print("Keine Solaranlagen zu verteilen, da schon genug vorhanden sind.")
-            buses['Power_' + Technik] = power_col
+            buses['Power_' + gcp] = power_col
             return buses
-        # if amount_total < 0:
-        #     amount_total = 0
-        #     print("Achtung, es sind mehr Solaranlagen im Netz als verteilt werden sollen!")
-        # #print("Anzahl der schon vorhandenen Solaranlagen:", amount)
-        #print("Anzahl der noch zu verteilenden Solaranlagen:", amount_total)
 
-
-    
+    # Distribute remaining gcp
     p = 0
     for key in groups_dict.keys():
-        #print("key:", key)
-        # buszahl aus group random ziehen, zahl folgt aus wert des keys
         group = groups_dict[key]
 
-        liste = []
-        if Technik == 'E_car':
-            print("E-Car, Haushalte berücksichtigen")
+        bus_list = []
+        if gcp == 'E_car':
             for bus in group.index:
-                # Bus index hinzufügen, so oft wie Haushalte existieren
-                liste.extend([bus] * int(buses.loc[bus, 'Haushalte']))
-                print("Bus:", bus, "Haushalte:", int(buses.loc[bus, 'Haushalte']))
+                # Add bus index according to the number of households
+                bus_list.extend([bus] * int(buses.loc[bus, 'Haushalte']))
+
 
         else:
-            # Bus index hinzufügen
-            print("Andere Technik, Haushalte nicht berücksichtigen")
-            liste = group.index.tolist()
+            # Add bus index
+            bus_list = group.index.tolist()
         
-        
-        print("Liste für Technik", Technik, ":", liste)
+        # Sample subset of buses randomly (sample size limited by available elements)
+        sample_size = int(min(key, len(bus_list)))
+        sampled_buses_index = random.sample(bus_list, sample_size)
 
-        #print("group:", group)
-
-        # 5 zeilen random ziehen
-        sample_size = int(min(key, len(liste))) # Sicherstellen, dass die Stichprobengröße nicht größer als die Gruppengröße ist
-        sampled_buses_index = random.sample(liste, sample_size)  # Zufällige Auswahl von Bussen aus der Gruppe
-        #print("sampled_buses:", sampled_buses)
-
-        # setzen von ['Factor_Technik'] in buses auf Faktor
-        if Technik == 'solar':
-            print("Setze solar_power:", solar_power, "für buses als Power")
+        # Assign gcp power based on type
+        if gcp == 'solar':
             power_col.loc[sampled_buses_index] = solar_power
-            #print("Setze solar_power:", solar_power, "für buses:", sampled_buses.index.tolist())
         else:
-            print("Setze:", key, "für buses als Power")
             power_col.loc[sampled_buses_index] += key
 
-        p +=sample_size
+        # Check if total amount exceeded and adjust
+        p += sample_size
         if p > amount_total:
             rest = int(p - amount_total)
-            print("p:", p   , "amount_total:", amount_total)
-            print("Rest wird abgezogen:", rest)
-            # rest zahl aus sample buses wieder random auf 0 setzen
+            # Randomly select 'rest' number of buses to set their power back to 0
             rest_buses_index = random.sample(sampled_buses_index, rest)
             power_col.loc[rest_buses_index] = 0
             break
 
-    # gemeinsame Spalte hinzufügen
-    buses['Power_' + Technik] = power_col
+    # Merge calculated power back into the buses DataFrame
+    buses['Power_' + gcp] = power_col
 
     return buses
 
 
-def solar_ausrichtung(buses: pd.DataFrame, plz: str, pv_plz: pd.DataFrame) -> pd.DataFrame:
+def solar_orientation(buses: pd.DataFrame, plz: str, pv_plz: pd.DataFrame) -> pd.DataFrame:
     """
-    Fügt den Bussen mit Solartechnik die Ausrichtung und Neigung basierend auf den PLZ-Daten hinzu.
-    
+    Assigns orientation and tilt angles to buses with solar technology based on postal code (PLZ) statistics.
+
     Args:
-        buses (pd.DataFrame): DataFrame mit den Busdaten, das die Spalte 'Power_solar' enthält.
-        plz (str): Die Postleitzahl, für die die Ausrichtung und Neigung zugeordnet werden soll.
-        pv_plz (pd.DataFrame): DataFrame mit den PLZ-Daten, das die Spalten 'Hauptausrichtung_Anteil' und 'HauptausrichtungNeigungswinkel_Anteil' enthält.
-        
+        buses (pd.DataFrame): 
+            DataFrame containing bus data, including the column 'Power_solar'.
+        plz (str): 
+            The postal code for which the solar orientation and tilt should be applied.
+        pv_plz (pd.DataFrame): 
+            DataFrame containing PLZ-level PV installation data with columns:
+            - 'Hauptausrichtung_Anteil': dict-like string of orientation probabilities (e.g. {"S": 0.6, "SW": 0.3, "W": 0.1})
+            - 'HauptausrichtungNeigungswinkel_Anteil': dict-like string of tilt angle probabilities.
+
     Returns:
-        pd.DataFrame: DataFrame mit den neuen Spalten 'Hauptausrichtung_Anteil' und 'HauptausrichtungNeigungswinkel_Anteil' für die Busse mit Solartechnik.
+        pd.DataFrame: 
+            Updated DataFrame with two new columns for solar-equipped buses:
+            - 'Hauptausrichtung_Anteil' (main orientation)
+            - 'HauptausrichtungNeigungswinkel_Anteil' (main tilt angle)
     """
 
 
-    # Ausrichtung und Neigung für PV
-    ausrichtung = ast.literal_eval(pv_plz.loc[plz, 'Hauptausrichtung_Anteil'])
-    neigung = ast.literal_eval(pv_plz.loc[plz, 'HauptausrichtungNeigungswinkel_Anteil'])
+    # Extract orientation and tilt distributions for the specified PLZ
+    orientation_dist = ast.literal_eval(pv_plz.loc[plz, 'Hauptausrichtung_Anteil'])
+    tilt_dist = ast.literal_eval(pv_plz.loc[plz, 'HauptausrichtungNeigungswinkel_Anteil'])
 
-    print("Neigung:", neigung)
-
-    # Filtern der buses mit solar
+    # Filter buses with solar
     df = buses[buses["Power_solar"] != 0].copy()
 
-    # Zuordnung der Ausrichtung
-    df["Hauptausrichtung_Anteil"] = np.random.choice(
-        list(ausrichtung.keys()),          # mögliche Buchstaben
-        size=len(df),                  # Anzahl = Zeilenanzahl
-        p=list(ausrichtung.values())       # Wahrscheinlichkeiten
-    )
+    # Randomly assign orientation and tilt based on probability distributions
+    df["Hauptausrichtung_Anteil"] = np.random.choice(list(orientation_dist.keys()), size=len(df), p=list(orientation_dist.values()))
+    df["HauptausrichtungNeigungswinkel_Anteil"] = np.random.choice(list(tilt_dist.keys()), size=len(df), p=list(tilt_dist.values()))
 
-    # Zuordnung der Neigung
-    df["HauptausrichtungNeigungswinkel_Anteil"] = np.random.choice(
-        list(neigung.keys()),          # mögliche Buchstaben
-        size=len(df),                  # Anzahl = Zeilenanzahl
-        p=list(neigung.values())       # Wahrscheinlichkeiten
-    )
-
-    # Zuordnung von Ausrichtung und Neigung 
+    # Write results back into main DataFrame
     buses.loc[df.index, 'Hauptausrichtung_Anteil'] = df['Hauptausrichtung_Anteil']
     buses.loc[df.index, 'HauptausrichtungNeigungswinkel_Anteil'] = df['HauptausrichtungNeigungswinkel_Anteil']
 
@@ -901,27 +872,29 @@ def solar_ausrichtung(buses: pd.DataFrame, plz: str, pv_plz: pd.DataFrame) -> pd
 
 def storage(buses: pd.DataFrame, storage_pv: float) -> pd.DataFrame:
     """
-    Fügt eine Spalte 'speicher' zu den Bussen hinzu, die den Speicherbedarf für Solarenergie berechnet.
-    
+    Adds a 'storage' column to the buses DataFrame, representing the storage capacity 
+    associated with solar installations.
+
     Args:
-        buses (pd.DataFrame): DataFrame mit den Busdaten, das die Spalten 'type_1' und 'p_nom_1' enthält.
-    
+        buses (pd.DataFrame): 
+            DataFrame containing bus data, including the column 'Power_solar'.
+        storage_pv (float): 
+            Probability (between 0 and 1) that a solar bus has an associated storage system. 
+            Derived from the market master data register.
+
     Returns:
-        pd.DataFrame: DataFrame mit der neuen Spalte 'speicher', die den Speicher bedarf für Solarenergie enthält.
+        pd.DataFrame: 
+            Updated DataFrame with a new column 'storage', indicating assigned storage capacity (in kWh).
     """
     
-    '''
-    Prob folgt aus Marktstammdatenregister:
-    '''
     prob = storage_pv 
-    
-    # np.random.seed(seed) # Setze einen Seed für Reproduzierbarkeit
     buses = buses.copy()
-    buses['speicher'] = 0.0
-    # Für alle Zeilen mit Power_solar, Speicherkapazität = Power_solar * 1
-    solar_index = buses[buses['Power_solar'] != 0].sample(frac=prob).index
-    buses.loc[solar_index, 'speicher'] = buses.loc[solar_index, 'Power_solar'] * 1 # 1 kWp PV-Leistung = 1 kWh Speicher
+    buses['storage'] = 0.0
 
+    # Randomly assign storage systems to a fraction of solar-equipped buses
+    solar_index = buses[buses['Power_solar'] != 0].sample(frac=prob).index
+    # 1 kWp PV capacity corresponds to 1 kWh storage capacity
+    buses.loc[solar_index, 'storage'] = buses.loc[solar_index, 'Power_solar'] * 1.0
 
     return buses
 
@@ -930,41 +903,40 @@ def storage(buses: pd.DataFrame, storage_pv: float) -> pd.DataFrame:
 
 def relative_humidity(t: float, td: float) -> float:
     """
-    Berechnet die relative Luftfeuchtigkeit basierend auf der Temperatur und dem Taupunkt.
+    Calculates the relative humidity based on the air temperature and dew point temperature.
     
     Args:
-        t (float): Die Temperatur in Grad Celsius.
-        td (float): Der Taupunkt in Grad Celsius.
+        t (float): Air temperature in degrees Celsius.
+        td (float): Dew point temperature in degrees Celsius.
         
     Returns:
-        float: Die relative Luftfeuchtigkeit in Prozent.
+        float: Relative humidity as a percentage (%).
     """
 
-    # t und td in °C
-    es = 6.112 * np.exp((17.67 * t) / (t + 243.5))  # Sättigungsdampfdruck
-    e = 6.112 * np.exp((17.67 * td) / (td + 243.5)) # Dampfdruck
+    # Both t and td are in °C
+    es = 6.112 * np.exp((17.67 * t) / (t + 243.5))  # Saturation vapor pressure
+    e = 6.112 * np.exp((17.67 * td) / (td + 243.5)) # Vapor pressure
     rh = 100 * e / es
+
     return rh
 
 
-def env_wetter(bbox: list, pfad: str, time_discretization: int = 3600, timesteps_horizon: int = 8760, timesteps_used_horizon: int = 8760, timesteps_total: int = 8760) -> Environment: #, year):
+def env_weather(bbox: list, path: str, time_discretization: int = 3600, timesteps_horizon: int = 8760, timesteps_used_horizon: int = 8760, timesteps_total: int = 8760) -> Environment: #, year):
     """
-    Lädt Wetterdaten von ERA5 für eine gegebene Bounding Box und berechnet relevante Umweltparameter.
+    Loads ERA5 weather data for a given bounding box and computes relevant environmental parameters.
     
     Args:
-        bbox (list): Liste mit den Koordinaten der Bounding Box im Format [W, S, E, N].
-        time_discretization (int): Zeitdiskretisierung in Sekunden (Standard: 3600 Sekunden = 1 Stunde).
-        timesteps_horizon (int): Anzahl der Zeitschritte im Planungshorizont (Standard: 8760 für ein Jahr).
-        timesteps_used_horizon (int): Anzahl der Zeitschritte, die tatsächlich verwendet werden (Standard: 8760 für ein Jahr).
-        timesteps_total (int): Gesamtanzahl der Zeitschritte (Standard: 8760 für ein Jahr).
-        year (int): Jahr der Wetterdaten (z.B. 2013).
+        bbox (list): Coordinates of the bounding box [W, S, E, N].
+        time_discretization (int): Time step in seconds (default 3600s = 1 hour).
+        timesteps_horizon (int): Number of timesteps in the planning horizon (default 8760 = 1 year).
+        timesteps_used_horizon (int): Number of timesteps actually used (default 8760 = 1 year).
+        timesteps_total (int): Total number of timesteps (default 8760 = 1 year).
         
     Returns:
-        Environment: Ein Environment-Objekt mit den geladenen Wetterdaten und berechneten Parametern.
+        Environment: An Environment object containing weather data and computed parameters.
     """
 
-
-    # Definierung der gebrauchten Tabellen
+    # Variables to load from ERA5 datasets
     variables = [
         ("10m_u_component_of_wind", "u10"),
         ("10m_v_component_of_wind", "v10"),
@@ -976,107 +948,54 @@ def env_wetter(bbox: list, pfad: str, time_discretization: int = 3600, timesteps
         ("total_cloud_cover", "tcc")
     ]
 
-    # # cdsapi Client initialisieren
-    # client = cdsapi.Client()
-    # # Daten für jede Variable anfordern
-    # for var, cod in variables:
-    #     dataset = "reanalysis-era5-single-levels"
-    #     request = {
-    #         "product_type": "reanalysis",
-    #         "variable": var,
-    #         "year": str(year),
-    #         "month": [
-    #             "01", "02", "03",
-    #             "04", "05", "06",
-    #             "07", "08", "09",
-    #             "10", "11", "12"
-    #         ],
-    #         "day": [
-    #             "01", "02", "03",
-    #             "04", "05", "06",
-    #             "07", "08", "09",
-    #             "10", "11", "12",
-    #             "13", "14", "15",
-    #             "16", "17", "18",
-    #             "19", "20", "21",
-    #             "22", "23", "24",
-    #             "25", "26", "27",
-    #             "28", "29", "30",
-    #             "31"
-    #         ],
-    #         "time": [
-    #             "00:00", "01:00", "02:00",
-    #             "03:00", "04:00", "05:00",
-    #             "06:00", "07:00", "08:00",
-    #             "09:00", "10:00", "11:00",
-    #             "12:00", "13:00", "14:00",
-    #             "15:00", "16:00", "17:00",
-    #             "18:00", "19:00", "20:00",
-    #             "21:00", "22:00", "23:00"
-    #         ],
-    #         "format": "netcdf",
-    #         "area": bbox
-    #     }
-
-    #     # Anfrage an den CDS stellen und Daten speichern
-    #     client.retrieve(dataset, request, var+'.nc')
-
-    # Daten in xarray Datasets laden
-    # und in einem Dictionary speichern
+    # Load datasets into a dictionary
     datasets = {}
     for var, cod in variables:
         filename = 'GER_' +var + '.nc'
-        ds = xr.open_dataset(os.path.join(pfad, 'input/weather_2013', filename))
+        ds = xr.open_dataset(os.path.join(path, 'input/weather_2013', filename))
         datasets[var] = ds
         print(f"Variable {var} verarbeitet.")
 
-    
-
-    # # Daten löschen
-    # for var, cod in variables:
-    #     os.remove(var + '.nc')
-    
-    
-    # Mittelpunkt von bbox
-    # Berechnet den Mittelpunkt der Bounding Box.
+    # Compute bounding box center
     # bbox: [N, W, S, E] [left, bottom, right, top]
     lat_target = (bbox[3] + bbox[1]) / 2
     lon_target = (bbox[0] + bbox[2]) / 2
 
     data_dict = {}
 
+    # Select nearest grid point for each variable
     for var, cod in variables:
         data = datasets[var].sel(latitude=lat_target, longitude=lon_target, method='nearest')
         df = data.to_dataframe()
         data_dict[var] = df[cod]
 
 
-    # Umrechnung der Einheiten
-    # Temperatur von Kelvin zu Celsius umwandeln
+    # Unit conversions
+    # Temperature: Kelvin → Celsius
     data_dict["2m_temperature"] = data_dict["2m_temperature"] - 273.15
     data_dict["2m_dewpoint_temperature"] = data_dict["2m_dewpoint_temperature"] - 273.15
 
-    # Luftdruck von Pa zu hPa umwandeln
-    data_dict["surface_pressure"] = data_dict["surface_pressure"] / 100  # Umwandlung von Pa zu hPa
+    # Pressure: Pa → hPa
+    data_dict["surface_pressure"] = data_dict["surface_pressure"] / 100
 
-    # Rel. Humidity  berechnen
+    # Compute relative humidity
     data_dict["2m_relative_humidity"] = relative_humidity(data_dict["2m_temperature"], data_dict["2m_dewpoint_temperature"])
 
-    # Windgeschwindigkeit berechnen
+    # Wind speed calculation
     data_dict["10m_wind_speed"] = (data_dict["10m_u_component_of_wind"]**2 + data_dict["10m_v_component_of_wind"]**2)**0.5
 
-    # Strahlungswerte berechnen: Umwandlung von J/m² zu W/m²
+    # Convert solar radiation from J/m² to W/m²
     data_dict["surface_solar_radiation_downwards"] = data_dict["surface_solar_radiation_downwards"] / 3600
     data_dict["total_sky_direct_solar_radiation_at_surface"] = data_dict["total_sky_direct_solar_radiation_at_surface"] / 3600
 
-    # Diffuse Strahlung berechnen
+    # Diffuse solar radiation calculation
     data_dict["surface_diffuse_solar_radiation_at_surface"] = data_dict["surface_solar_radiation_downwards"] - data_dict["total_sky_direct_solar_radiation_at_surface"]
 
-    # Bedeckungsgrad berechnen
+    # Compute cloud cover: scale to 0-8 octas
     data_dict["total_cloud_cover"] = (data_dict["total_cloud_cover"] * 8).round().clip(lower=0, upper=8)
 
-    # Neue Variablen definieren
-    variables_neu = [
+    # Select relevant variables for Environment
+    variables_new = [
         "10m_wind_speed",
         "2m_relative_humidity",
         "2m_temperature",
@@ -1086,13 +1005,12 @@ def env_wetter(bbox: list, pfad: str, time_discretization: int = 3600, timesteps
         "total_cloud_cover"
     ]
 
-    # Speichern der Daten in CSV-Dateien
-    for var in variables_neu:
+    # Save intermediate CSV files for PyPSA Weather input
+    for var in variables_new:
         filename = f"{var}_nearest.txt"
         data_dict[var].to_csv(filename, sep="\t", index=False, header=False)
 
-
-    # Erstellen der Environment
+    # Timer object
     timer = Timer(
         time_discretization=time_discretization,
         timesteps_horizon=timesteps_horizon,
@@ -1100,7 +1018,7 @@ def env_wetter(bbox: list, pfad: str, time_discretization: int = 3600, timesteps
         timesteps_total=timesteps_total
     )
 
-
+    # Weather object for PyPSA
     weather = Weather(timer,
                     path_TRY=None, path_TMY3=None,
                     path_temperature="2m_temperature_nearest.txt",
@@ -1118,10 +1036,10 @@ def env_wetter(bbox: list, pfad: str, time_discretization: int = 3600, timesteps
     prices = Prices()
     environment = Environment(timer, weather, prices)
 
-    for var in variables_neu:
+    # Clean up temporary CSV files
+    for var in variables_new:
         filename = f"{var}_nearest.txt"
         os.remove(filename)
-        print(f"{filename} wurde gelöscht.")
 
     return environment
 
