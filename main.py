@@ -92,17 +92,40 @@ Waldmünchen
 '''
 2 Nodes
 '''
-top =  49.3727 # # Upper latitude
-bottom = 49.372485 # Lower latitude
-left =  12.703688   # Right longitude
-right =  12.704 # Left longitude
+# top =  49.3727 # # Upper latitude
+# bottom = 49.372485 # Lower latitude
+# left =  12.703688   # Right longitude
+# right =  12.704 # Left longitude
+
+'''
+Opfingen
+'''
+top =  48.00798 # # Upper latitude
+bottom = 47.99434 # Lower latitude
+left =  7.70691   # Right longitude
+right =  7.72483   # Left longitude
+
+
 
 grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=5)
+#%%
+grid.export_to_netcdf("input/dist_grid_for_optimize.nc")
+
+import networkx as nx
+nx.write_gpickle(area, "input/area_for_optimize.pkl") 
+
+import geopandas as gpd
+features.to_file("input/features_for_optimize.gpkg", driver="GPKG")
+
 # %%
 # STEP 6
 # .optimize()
 
+BranchTee_mvgd_32594_lvgd_3031000007_building_727463_solar
 
+grid.generators_t.p_max_pu['BranchTee_mvgd_32594_lvgd_3031000001_building_727925_solar'].plot()
+
+grid.generators_t.p_max_pu['BranchTee_mvgd_32594_lvgd_3031000007_building_727463_solar'].plot()
 # # Fix Capacity
 # grid_1.optimize.fix_optimal_capacities()
 

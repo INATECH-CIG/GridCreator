@@ -95,12 +95,14 @@ def create_pv(env: Environment, peakpower: float, index: pd.DatetimeIndex, beta:
     # Convert gamma string to internal PV dictionary format
     gamma = solar_dict[gamma]
     
-    # Create PV system
-    # Note: peakpower is already in MW, so no conversion needed
+    # Create PV system with peak power in kW
     pv_system = pv.PV(peak_power=peakpower, environment=env, area=area, eta_noct=eta_noct, beta=beta, gamma=gamma, method=meth)
     
-    # Calculate PV power (already in MW)
+    # Calculate PV power in W
     pv_power = pv_system.getPower()
+
+    # Convert from W to MW
+    pv_power = pv_power * 1e-6
 
     # Create Pandas Series with the given index
     power_series = pd.Series(pv_power, index=index, name='pv_power_MW')
@@ -173,7 +175,7 @@ def create_hp(index: pd.DatetimeIndex, env: Environment, hp_params=None, flow_te
     if flow_temp is None:
         flow_temp = np.full(len(index), 45)
 
-    # Nominal electric power values for given flow temps
+    # Nominal electric power values for given flow temps in kW
     nominals= heatpump.getNominalValues(flow_temp)
 
     # Default schedule based on ambient temperature if not provided
