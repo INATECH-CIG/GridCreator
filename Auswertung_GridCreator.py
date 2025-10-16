@@ -23,75 +23,30 @@ aktivieren!
 '''
 
 #%% Pypsa netzwerk einlesen aus .nc datei
-network = pypsa.Network("input/dist_grid_for_optimize.nc")
+network = pypsa.Network("input/grid_Schallstadt_GER.nc")
 
 #%% import area und features
 
-with open("input/area_for_optimize.pkl", "rb") as f:
+with open("input/area_Schallstadt_GER.pkl", "rb") as f:
     area = pickle.load(f)
-features = gpd.read_file("input/features_for_optimize.gpkg")
-
-#%%
-#%% Pypsa netzwerk einlesen aus .nc datei
-network_opf = pypsa.Network("input/grid_1_STEP_5_Opfingen.nc")
-
-#%% import area und features
-
-with open("input/area_Opfingen.pkl", "rb") as f:
-    area_opf = pickle.load(f)
-features_opf = gpd.read_file("input/features_Opfingen.gpkg")
-
+features = gpd.read_file("input/features_Schallstadt_GER.gpkg")
 
 
 
 #%%
 
+'''
+"Problem" verkleinern
+'''
 
 # Fix Capacity
-grid_1.optimize.fix_optimal_capacities()
+network.optimize.fix_optimal_capacities()
 
 # Set snapshots für Optimierung
 start_time = pd.Timestamp("2023-01-01 00:00:00")
 end_time = pd.Timestamp("2023-01-07 23:00:00")
 snapshots = pd.date_range(start=start_time, end=end_time, freq='h')
-grid_1.set_snapshots(snapshots)
-
-#%%
-
-grid_1.export_to_netcdf("input/dist_grid_for_optimize.nc")
-
-#%%
-grid_1.optimize()
-
-
-
-
-#%%
-# Loads von Buses aus Network_opf an jeweiligen bus von network anhängen
-# und p_set übertragen
-for bus in network.buses.index:
-    if bus in network_opf.buses.index:
-        loads_at_bus = network_opf.loads[network_opf.loads['bus'] == bus]
-        for load in loads_at_bus.index:
-            new_load_name = f"{load}_from_network"
-            network.add("Load",
-                            name=new_load_name,
-                            bus=bus,
-                            p_set=network_opf.loads_t.p_set[load],
-                            controllable=network_opf.loads.at[load, 'controllable'] if 'controllable' in network_opf.loads.columns else False,
-                            type=network_opf.loads.at[load, 'type'] if 'type' in network_opf.loads.columns else None,
-                            )
-
-
-#%%
-
-
-
-
-
-
-
-
+network.set_snapshots(snapshots)
 
 
 #%% Netzwerk plotten
@@ -101,23 +56,32 @@ fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCar
 # Netzplot
 network.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
 # OSM-Daten
-ox.plot_graph(area_opf, ax=ax, show=False, close=False)
-features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
+ox.plot_graph(area, ax=ax, show=False, close=False)
+#features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
 # Liste von Generator-Kategorien: (Filter-Funktion, Farbe, Label)
+# Busse nach Typ und Carrier
+gen_buses = {
+    'solar': set(network.generators[network.generators['carrier'] == 'solar']['bus']),
+    'HP': set(network.generators[network.generators['carrier'] == 'HP']['bus'])
+}
+
+storage_buses = {
+    'E_Auto': set(network.storage_units[network.storage_units['carrier'] == 'E_Auto']['bus'])
+}
+
+# Kategorien definieren: Busmengen, Farbe, Label
 gen_categories = [
-    (lambda g: g['carrier'] == 'solar', 'yellow', 'Solar Generatoren'),
-    (lambda g: g['carrier'] == 'E_car', 'green', 'E-Car Generatoren'),
-    (lambda g: g['carrier'] == 'HP', 'blue', 'HP Generatoren'),
-    (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'solar'), 'purple', 'HP & Solar Generatoren'),
-    (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'E_car'), 'pink', 'HP & E-Car Generatoren'),
-    (lambda g: (g['carrier'] == 'solar') & (g['carrier'] == 'E_car'), 'violet', 'Solar & E-Car Generatoren')
+    (gen_buses['solar'], 'yellow', 'Solar Generatoren'),
+    #(storage_buses['E_Auto'], 'green', 'E-Car Generatoren'),
+    (gen_buses['HP'], 'blue', 'HP Generatoren'),
+    (gen_buses['HP'] & gen_buses['solar'], 'purple', 'HP & Solar Generatoren'),
+    (gen_buses['HP'] & storage_buses['E_Auto'], 'pink', 'HP & E-Car Generatoren'),
+    (gen_buses['solar'] & storage_buses['E_Auto'], 'violet', 'Solar & E-Car Generatoren')
 ]
 
-for filt, color, label in gen_categories:
-    gens = network.generators[filt(network.generators)]
-    if not gens.empty:
-        buses = gens['bus'].unique()
-        coords = network.buses.loc[buses, ['x', 'y']]
+for buses, color, label in gen_categories:
+    if buses:
+        coords = network.buses.loc[list(buses), ['x', 'y']]
         ax.scatter(
             coords['x'], coords['y'],
             color=color,
@@ -149,56 +113,34 @@ for gen in gas_gens.index:
 
 
 # #%%
-# Im Netz von Freiburg entstehen doppelte Generatoren?
+# # Im Netz von Freiburg entstehen doppelte Generatoren?
 # network.generators.drop('Generator_am_Transformer_lv_grid_8507500106_reinforced_2', inplace=True)
 
 # network.generators.drop('Storage_am_Transformer_lv_grid_8507500106_reinforced_2', inplace=True)
 
 # #%%
-# Für alle solar generatoren p_min_pu = p_max_pu setzen
+# #Für alle solar generatoren p_min_pu = p_max_pu setzen
 # for gen in network.generators.index:
 #     if network.generators.at[gen, 'carrier'] == 'solar':
 #         network.generators.at[gen, 'p_min_pu'] = network.generators.at[gen, 'p_max_pu']
 
 
-# #%%
-# # Gruppieren der Lasten nach Bus
-# loads_grouped = network.loads.groupby(network.loads['bus'])
-
-# # Random bus mit Generator ziehen
-# random_bus_with_gen = network.generators.sample()
-# print("Zufälliger Bus mit Generator:", random_bus_with_gen['bus'].values[0])
-
-# # Filtern der Lasten am Bus
-# filtered_group = loads_grouped.get_group(random_bus_with_gen['bus'].values[0])
-
-# # Filtern der Generatoren am Bus
-# gens_at_bus = [g for g in network.generators.index if g.startswith(random_bus_with_gen['bus'].values[0])]
-
 #%%
-# einen random bus mit generator filtern
-
+# Random bus mit Generator ziehen
 random_bus_with_gen = network.generators.sample()
+print("Zufälliger Bus mit Generator:", random_bus_with_gen['bus'].values[0])
 
-# alle loads_t.p_set die an diesem bus sind filtern und aufsummieren
+# Filtern der Generatoren am Bus
+gens_at_bus = [g for g in network.generators.index if g.startswith(random_bus_with_gen['bus'].values[0])]
+
+# Loads für diesen bus extrahieren und summieren
 loads_at_bus = network.loads[network.loads['bus'] == random_bus_with_gen['bus'].values[0]]
-filtered_group = loads_at_bus
-# alle generatoren an diesem bus filtern
-gens_at_bus = network.generators[network.generators['bus'] == random_bus_with_gen['bus'].values[0]].index
-print(f"Zufälliger Bus mit Generator: {random_bus_with_gen['bus'].values[0]}")
-print(f"Anzahl der Lasten an diesem Bus: {len(filtered_group)}")
-print(f"Anzahl der Generatoren an diesem Bus: {len(gens_at_bus)}")
-print(f"Lasten an diesem Bus:\n{filtered_group}")
-print(f"Generatoren an diesem Bus:\n{gens_at_bus}")
-
-
-
 
 #%%
 # Plotten von Gesamtlast und Gesamterzeugung an dem bus
 fig, ax = plt.subplots(figsize=(10, 5))
 # Last-Summe
-load_sum = network.loads_t.p_set[filtered_group.index].sum(axis=1)
+load_sum = network.loads_t.p_set[loads_at_bus.index].sum(axis=1)
 ax.plot(load_sum, label='Summe aller Lasten', color='blue', linewidth=2)
 # Generation-Summe
 gen_sum = network.generators_t.p_max_pu[gens_at_bus].sum(axis=1)*1e-3
@@ -217,19 +159,6 @@ Optimieren
 
 network.optimize(solver_name='gurobi', solver_options={'ResultFile':'model_all.ilp'}, snapshots=network.snapshots[0])
 
-
-# %%
-'''
-Plot der Flüsse der ersten 24h
-'''
-fig, ax = plt.subplots(figsize=(10, 5))
-for line in network.lines.index:
-    ax.plot(network.lines_t.p0[line][:24], label=line)
-ax.set_title('Leitungsflüsse der ersten 24 Stunden')
-ax.set_xlabel('Zeit (Stunden)')
-ax.set_ylabel('Leistungsfluss (MW)')
-ax.legend().remove()  # Legende entfernen, wenn zu viele Linien vorhanden sind
-plt.show()
 # %%
 '''
 24 Plots für die ersten 24h
@@ -311,10 +240,31 @@ for hour in range(24):
 
     # OSM-Daten
     ox.plot_graph(area, ax=ax, show=False, close=False)
-    features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
+    # features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
     ax.set_title(f'Leitungsflüsse – Stunde {hour + 1}')
     plt.show()
     plt.close(fig)
+
+#%%
+
+# Profil von einem Solargenerator, einem E-Auto und einer Wärmepumpe
+solar_gen = network.generators[network.generators['carrier'] == 'solar'].sample().index[0]
+e_car_gen = network.storage_units[network.storage_units['carrier'] == 'E_Auto'].sample().index[0]
+hp_gen = network.generators[network.generators['carrier'] == 'HP'].sample().index[0]
+
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(network.generators_t.p_max_pu[solar_gen], label=f'Solar Generator {solar_gen}', color='orange')
+ax.plot(network.storage_units_t.state_of_charge_set[e_car_gen], label=f'E-Car Generator {e_car_gen}', color='green')
+ax.plot(network.generators_t.p_max_pu[hp_gen], label=f'HP Generator {hp_gen}', color='blue')
+ax.set_title('Leistung von Beispiel-Generatoren über 24 Stunden')
+ax.set_xlabel('Zeit')
+ax.set_ylabel('Leistung (kW)')
+ax.legend()
+plt.show()
+
+#%%
+
+
 
 #%%
 '''

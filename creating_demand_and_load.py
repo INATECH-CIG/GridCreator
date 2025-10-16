@@ -20,7 +20,7 @@ def create_haus(env: Environment, people: int, index: pd.DatetimeIndex, light_co
         people (int): Number of people in the household.
         index (pd.DatetimeIndex): Timestamps for the load profile.
         light_config (int, optional): Lighting configuration, defaults to 10.
-        method (int, optional): Method for ElectricalDemand calculation, defaults to 2.
+        meth (int, optional): Method for ElectricalDemand calculation, defaults to 2.
         weather_file (optional): Placeholder for future weather-dependent demand (currently unused).
 
     Returns:
@@ -47,31 +47,50 @@ def create_haus(env: Environment, people: int, index: pd.DatetimeIndex, light_co
 
 def create_e_car(occ: Occupancy, index: pd.DatetimeIndex) -> pd.Series:
     """
-    Generates the electric vehicle (EV) charging profile based on household occupancy.
-    The EV charges only when all residents are at home.
+    Generates an electric vehicle (EV) charging profile based on occupancy.
 
     Args:
-        occ (Occupancy): Occupancy object for the household.
-        index (pd.DatetimeIndex): Timestamps for the load profile.
+        occ: Occupancy object containing presence information.
+        index (pd.DatetimeIndex): Timestamps for the EV profile.
 
     Returns:
-        pd.Series: EV charging power in MW at each timestep.
+        soc_set (pd.Series): State of charge setpoints at departure times (1.0 = fully charged).
+        spill (pd.Series): Energy loss during absence (10% of charging power).
+        charging_power (float): Constant charging power in MW (7 kW = 0.007 MW).
     """
 
     # Determine occupancy at each timestep
-    max_occ = np.max(occ.get_occ_profile_in_curr_timestep())
-    current_occupancy = occ.get_occ_profile_in_curr_timestep()
-
-    # EV charges only when all residents are home
-    charging = np.where(current_occupancy == max_occ, 1, 0)
+    current_occupancy = np.rint(occ.get_occ_profile_in_curr_timestep()).astype(int)
+    max_occ = np.max(current_occupancy)
     
+    # EV charges only when all residents are home
+    charging_array = np.where(current_occupancy == max_occ, 1, 0)
+
     # Assume 7 kW charging power, convert to MW
-    charging_power = charging * 7e-3  # 7 kW → 0.007 MW
+    charging_power = 7e-3  # 7 kW → 0.007 MW
 
-    # Create Pandas Series with the given index
-    charging_power = pd.Series(charging_power, index=index)
+    # Convert charging array to Pandas Series to use .diff() and .loc
+    charging = pd.Series(charging_array, index=index) 
 
-    return charging_power
+    # Setting state of charge = 1 at departure times (1 → 0)
+    change = charging.diff()
+    departures = (change == -1)
+
+    soc_set = pd.Series(np.nan, index=charging.index)
+    soc_set.loc[departures] = 1.0
+
+    '''
+    SOC wird gerade auf Abfahrtszeitpunkt gelegt, passt vllt auch?
+    '''
+
+    # # Setze SoC eine Stunde vor Abfahrt
+    # soc_set.loc[departures.shift(-1, fill_value=False)] = 1.0
+
+    # Energy loss during absence (spill)
+    spill = pd.Series(0.0, index=charging.index)
+    spill.loc[charging == 0] = 0.1 * charging_power  # 10% of charging power when not at home
+
+    return soc_set, spill, charging_power
 
 
 def create_pv(env: Environment, peakpower: float, index: pd.DatetimeIndex, beta: float, gamma: str, area: float = 10.0, eta_noct: float = 0.15, meth: int = 1) -> pd.Series:

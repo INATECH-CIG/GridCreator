@@ -7,7 +7,7 @@ import pandas as pd
 
 
 #%%
-def GridCreator(top: float, bottom: float, left: float, right: float, steps=5, technologies=['solar', 'E_car', 'HP']) -> tuple:
+def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2,3,4,5], technologies=['solar', 'E_car', 'HP'], load_method: int = 0, buses_df = pd.DataFrame(), area = gpd.GeoDataFrame(), features = gpd.GeoDataFrame()) -> tuple:
     '''
     Main function for GridCreator  
     Steps:
@@ -24,7 +24,13 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=5, t
         bottom: Lower latitude
         left: Left longitude
         right: Right longitude
-        steps: Number of steps to execute (1-6), default=5 (up to step 5)
+        steps: List of steps to execute (1-5)
+        technologies: List of technologies to consider (e.g., ['solar', 'E_car', 'HP'])
+        load_method: Method for load profile generation (0: predefined profiles, 1: generating individual profiles)
+        buses_df: DataFrame containing buses and related data (optional, default is empty DataFrame)
+        area: GeoDataFrame containing the area (optional, default is empty GeoDataFrame)
+        features: GeoDataFrame containing features (optional, default is empty GeoDataFrame)
+
         
     Returns:
         grid_1: PyPSA grid
@@ -36,16 +42,24 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=5, t
     path = ds.save_data()
 
     # STEP 1
-    #Grid creation
-    bbox = [left, bottom, right, top]
-    grid, bbox = mf.ding0_grid(bbox, path)
-    # Initialize DataFrame for return
-    buses_df = pd.DataFrame()
-    area = gpd.GeoDataFrame()
-    features = gpd.GeoDataFrame()
+    if 1 in steps:        
+        #Grid creation
+        bbox = [left, bottom, right, top]
+        grid, bbox = mf.ding0_grid(bbox, path)
+
+        # Check if pypsa network is empty
+        if grid.buses.empty:
+            print("Das erzeugte Netz ist leer. Bitte überprüfen Sie die Eingabekoordinaten.")
+            return grid, buses_df, bbox, area, features
+        
+        # Return if only Step 1 is selected
+        if steps[-1] == 1:
+
+            print(buses_df.head())
+            return grid, buses_df, bbox, area, features
 
     # STEP 2
-    if steps >1:
+    if 2 in steps:
         # Load data
         # OSM data
         buffer = 0.0002  # corresponds to approximately 20 m
@@ -53,8 +67,15 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=5, t
         # Federal state data
         gpd_federal_state = gpd.read_file(f"{path}/input/georef-germany-postleitzahl.geojson")
         buses_df = mf.data_assignment(buses_df, gpd_federal_state, path)
+
+        # Return if Step 2 is the last selected step
+        if steps[-1] == 2:
+            print(buses_df.head())
+            return grid, buses_df, bbox, area, features
+        
+    
     # STEP 3
-    if steps >2:
+    if 3 in steps:
         # Assign technologies
         # Define technologies
         gcp = technologies # gcp = generation and consumption plants
@@ -63,17 +84,34 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=5, t
         buses_df = mf.appartments_assignment(buses_df)
         # Add technology data to buses_df
         buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, path)
-    # STEP 4
-    if steps >3:
-        # Add time series
-        grid = mf.loads_assignment(grid, buses_df, bbox, path)
 
+        # Return if Step 3 is the last selected step
+        if steps[-1] == 3:
+            print(buses_df.head())
+            return grid, buses_df, bbox, area, features
+        
+    
+    # STEP 4
+    if 4 in steps:
+        # Add time series
+        grid = mf.loads_assignment(grid, buses_df, bbox, path, load_method)
+
+        # Return if Step 4 is the last selected step
+        if steps[-1] == 4:
+            print(buses_df.head())
+            return grid, buses_df, bbox, area, features
 
     # STEP 5
-    if steps >4:
+    if 5 in steps:
         # Prepare grid for pysa.optimize()
         grid = mf.pypsa_preparation(grid)
 
+        # Return if Step 4 is the last selected step
+        if steps[-1] == 4:
+            print(buses_df.head())
+            return grid, buses_df, bbox, area, features
+        
+    
     return grid, buses_df, bbox, area, features
 
 #%%
@@ -100,14 +138,73 @@ Waldmünchen
 '''
 Opfingen
 '''
-top =  48.00798 # # Upper latitude
-bottom = 47.99434 # Lower latitude
-left =  7.70691   # Right longitude
-right =  7.72483   # Left longitude
+# top =  48.00798 # # Upper latitude
+# bottom = 47.99434 # Lower latitude
+# left =  7.70691   # Right longitude
+# right =  7.72483   # Left longitude
+
+'''
+Schallstadt
+'''
+top =  47.967835 # # Upper latitude
+bottom = 47.955593 # Lower latitude
+left =  7.735381   # Right longitude
+right =  7.772647   # Left longitude
+
+grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)
+
+#%%
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import osmnx as ox
+
+network = grid
+
+fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+# Netzplot
+network.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
+# OSM-Daten
+ox.plot_graph(area, ax=ax, show=False, close=False)
+features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
+# Liste von Generator-Kategorien: (Filter-Funktion, Farbe, Label)
+gen_categories = [
+    (lambda g: g['carrier'] == 'solar', 'yellow', 'Solar Generatoren'),
+    (lambda g: g['carrier'] == 'E_car', 'green', 'E-Car Generatoren'),
+    (lambda g: g['carrier'] == 'HP', 'blue', 'HP Generatoren'),
+    (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'solar'), 'purple', 'HP & Solar Generatoren'),
+    (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'E_car'), 'pink', 'HP & E-Car Generatoren'),
+    (lambda g: (g['carrier'] == 'solar') & (g['carrier'] == 'E_car'), 'violet', 'Solar & E-Car Generatoren')
+]
+
+for filt, color, label in gen_categories:
+    gens = network.generators[filt(network.generators)]
+    if not gens.empty:
+        buses = gens['bus'].unique()
+        coords = network.buses.loc[buses, ['x', 'y']]
+        ax.scatter(
+            coords['x'], coords['y'],
+            color=color,
+            s=20,
+            label=label,
+            zorder=5
+        )
+
+# Trafo-Busse markieren
+tra_buses = network.transformers['bus1'].unique()
+tra_coords = network.buses.loc[tra_buses][['x', 'y']]
+ax.scatter(
+    tra_coords['x'],
+    tra_coords['y'],
+    color='red',
+    s=10,         # Punktgröße
+    label='Transformers',
+    zorder=5      # überlagert andere Layer
+)
 
 
+ax.legend(loc='upper right')
 
-grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=5)
+
 #%%
 grid.export_to_netcdf("input/dist_grid_for_optimize.nc")
 
@@ -121,11 +218,6 @@ features.to_file("input/features_for_optimize.gpkg", driver="GPKG")
 # STEP 6
 # .optimize()
 
-BranchTee_mvgd_32594_lvgd_3031000007_building_727463_solar
-
-grid.generators_t.p_max_pu['BranchTee_mvgd_32594_lvgd_3031000001_building_727925_solar'].plot()
-
-grid.generators_t.p_max_pu['BranchTee_mvgd_32594_lvgd_3031000007_building_727463_solar'].plot()
 # # Fix Capacity
 # grid_1.optimize.fix_optimal_capacities()
 
