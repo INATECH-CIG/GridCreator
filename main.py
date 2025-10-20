@@ -152,15 +152,17 @@ right =  7.772647   # Left longitude
 
 grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)
 
-grid.export_to_netcdf("output/grid_Schallstadt_GER.nc")
+#%%
+grid.export_to_netcdf("output/grid_Schallstadt_GER_ecar.nc")
 
-buses.to_csv("output/buses_Schallstadt_GER.csv")
+#%%
+# buses.to_csv("output/buses_Schallstadt_GER.csv")
 
-import networkx as nx
-nx.write_gpickle(area, "output/area_Schallstadt_GER.pkl") 
+# import networkx as nx
+# nx.write_gpickle(area, "output/area_Schallstadt_GER.pkl") 
 
-import geopandas as gpd
-features.to_file("output/features_Schallstadt_GER.gpkg", driver="GPKG")
+# import geopandas as gpd
+# features.to_file("output/features_Schallstadt_GER.gpkg", driver="GPKG")
 
 
 # #%%

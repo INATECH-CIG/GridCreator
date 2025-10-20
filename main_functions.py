@@ -475,7 +475,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     for _ in range(int(row["Power_E_car"] // row["Factor_E_car"]))
     ]
 
-    e_car_soc = {}
+    e_car_charging = {}
     e_car_spill = {}
 
     # Household sizes in a dictionary
@@ -501,7 +501,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             power_df = pd.DataFrame(index=snapshots)
             occupants_dict[persons] = {}
 
-            for profile_number in range(1, 11):
+            for profile_number in range(1, 3):
                 power_series, occupancy_series = demand_load.create_haus(people=persons, index=snapshots, env=environment)
                 power_df[f"profile_{profile_number}"] = power_series
                 occupants_dict[persons][f"profile_{profile_number}"] = occupancy_series
@@ -510,7 +510,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             power_dict[persons] = power_df
 
 
-    def house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method):
+    def house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method):
         """
         Creates a household load (and possibly EV load) for a given bus.
 
@@ -521,7 +521,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             bus (str): The current bus being processed.
             remaining_residents (int): Number of residents left to assign.
             load_cols (dict): Dictionary storing household power profiles.
-            e_car_soc (dict): Dictionary storing electric vehicle state of charge profiles.
+            e_car_charging (dict): Dictionary storing electric vehicle state of charge profiles.
             e_car_spill (dict): Dictionary storing electric vehicle spill profiles.
             e_car_buses (list): List of buses that have electric vehicles.
             call_counter (int): Counter to ensure unique load names.
@@ -530,13 +530,13 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             environment: Environmental data object.
 
         Returns:
-            Tuple: Updated (buses, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter)
+            Tuple: Updated (buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter)
         """
         call_counter += 1
         if method == 0:
             # Create household load using standard profiles
             # Select random number between 1 and 10 for different standard profiles
-            profile_number = np.random.randint(1, 11)
+            profile_number = np.random.randint(1, 3)
             profile_col = f"profile_{profile_number}"
 
             # Select profile from dictionary
@@ -550,17 +550,50 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
 
         # If the bus has electric vehicles, create an EV storage unit
         if bus in e_car_buses:
-            soc_set, spill, charging_power = demand_load.create_e_car(occ = occupants, index=snapshots)
-            grid.add("StorageUnit", name=f"{bus}_E_Auto_{call_counter}", p_nom = charging_power, bus=bus, carrier="battery")
-            e_car_soc[f"{bus}_E_Auto_{call_counter}"] = soc_set
-            e_car_spill[f"{bus}_E_Auto_{call_counter}"] = spill
+            soc_set, spill, charging_power, charging = demand_load.create_e_car(occ = occupants, index=snapshots)
+            # grid.add("StorageUnit", name=f"{bus}_E_Auto_{call_counter}", p_nom = charging_power, bus=bus, carrier="battery")
+            # e_car_soc[f"{bus}_E_Auto_{call_counter}"] = soc_set
+            # e_car_spill[f"{bus}_E_Auto_{call_counter}"] = spill
+
+
+            grid.add("Bus", f"{bus}E-Car", carrier="battery")
+            grid.add("Link", f"{bus}E-Car_Connector_charge", bus0=bus, bus1=f"{bus}E-Car",
+                     p_nom=charging_power,
+                     efficiency=0.95)
+            e_car_charging[f"{bus}E-Car_Connector_charge"] = charging
+            grid.add("Link", f"{bus}E-Car_Connector_discharge", bus0=f"{bus}E-Car", bus1=bus,
+                     p_nom=charging_power,
+                     efficiency=0.95)
+            e_car_charging[f"{bus}E-Car_Connector_discharge"] = charging
+
+            grid.add("Load", f"{bus}E-Car_Load", bus=f"{bus}E-Car",
+                # p_set=spill, 
+                index=snapshots)
+            e_car_spill[f"{bus}E-Car_Load"] = spill
+
+            grid.add("Store", f"{bus}E-Car_Storage",
+                bus=f"{bus}E-Car",
+                e_nom=77*1e-3, # MWh https://www.enbw.com/blog/elektromobilitaet/laden/wie-gross-muss-die-batterie-fuer-mein-elektroauto-sein/
+                e_initial=77*1e-3,
+                efficiency_store=0.9,
+                efficiency_dispatch=0.9,
+                self_discharge=0.01)
+
+
+
+
+
+
+
+
+
             if buses.loc[bus, 'Power_E_car'] <= buses.loc[bus, 'Factor_E_car']:
                 # Remove bus from EV list once fully assigned
                 e_car_buses.remove(bus)
             else:
                 buses.loc[bus, 'Power_E_car'] -= buses.loc[bus, 'Factor_E_car']
 
-        return buses, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter
+        return buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter
 
     # Assign loads and EVs to each bus
     for bus in buses.index:
@@ -575,17 +608,19 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
                 n_households = int(buses.loc[bus, household_type])
                 if n_households > 0:
                     for i in range(n_households):
-                        buses, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter = house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method)
+                        buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter = house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method)
 
 
             while remaining_residents > 0:
                 persons = min(remaining_residents, 5)  # Nimm maximal 5 Personen für den Haushalt
-                buses, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method)
+                buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method)
 
     # Combine all generated profiles into PyPSA objects
     grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
-    grid.storage_units_t.state_of_charge_set = pd.concat([grid.storage_units_t.state_of_charge_set, pd.DataFrame(e_car_soc)], axis=1)
-    grid.storage_units_t.spill = pd.concat([grid.storage_units_t.spill, pd.DataFrame(e_car_spill)], axis=1)
+    # grid.storage_units_t.state_of_charge_set = pd.concat([grid.storage_units_t.state_of_charge_set, pd.DataFrame(e_car_soc)], axis=1)
+    # grid.storage_units_t.spill = pd.concat([grid.storage_units_t.spill, pd.DataFrame(e_car_spill)], axis=1)
+    grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(e_car_spill)], axis=1)
+    grid.links_t.p_max_pu = pd.concat([grid.links_t.p_max_pu, pd.DataFrame(e_car_charging)], axis=1)
 
     # Assign solar generators based on bus data
     # Remove all existing solar generators before adding new ones.

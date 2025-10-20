@@ -1,8 +1,18 @@
 #%%
 import pypsa
 import pandas as pd
+from pathlib import Path
 
+#%%
 
+# Basis: das Verzeichnis zu GridCreator
+this_dir = Path(__file__).parent
+
+# Pfad zur .nc-Datei
+file = this_dir / "output" / "grid_Schallstadt_GER_optimize_ecar.nc"
+
+#%% Pypsa netzwerk einlesen aus .nc datei
+network = pypsa.Network(file)
 
 def analyze_infeasibility(network_path):
 	print(f"Loading network from {network_path}...")
@@ -27,21 +37,21 @@ def analyze_infeasibility(network_path):
 
 
 if __name__ == "__main__":
-	analyze_infeasibility("../output/grid_Schallstadt_GER_optimize.nc")
-	n = pypsa.Network("../output/grid_Schallstadt_GER_optimize.nc")
+	analyze_infeasibility(file)
+	n = pypsa.Network(file)
 	# n.generators_t.p_max_pu["BranchTee_mvgd_36165_lvgd_1884820002_building_28969804_solar"] = 1
-	n.optimize(snapshots=n.snapshots[0], solver_name="gurobi")
+	n.optimize(snapshots=n.snapshots[:], solver_name="gurobi")
 
 
 #%%
 # Pypsa netzwerk einlesen aus .nc datei
-network = pypsa.Network("../output/grid_Schallstadt_GER_optimize.nc")
+network = pypsa.Network(file)
 #%%
 # Carrier in StorageUnits und Generatoren
-used_carriers = set(n.generators['carrier'].unique()) | set(n.storage_units['carrier'].unique())
+used_carriers = set(network.generators['carrier'].unique()) | set(network.storage_units['carrier'].unique())
 
 # Definierte Carrier
-defined_carriers = set(n.carriers.index)
+defined_carriers = set(network.carriers.index)
 
 # Nicht definierte Carrier
 undefined_carriers = used_carriers - defined_carriers
@@ -100,12 +110,12 @@ def check_network_issues(network_path):
     return n
 
 # Beispielaufruf
-network_path = "../output/grid_Schallstadt_GER_optimize.nc"
+network_path = file
 n = check_network_issues(network_path)
 
 #%%
 # Netzwerk speichern
-network.export_to_netcdf("../output/grid_Schallstadt_GER_optimize.nc")
+network.export_to_netcdf(file)
 
 #%%
 network.loads.p_set = network.loads.p_set.replace(0, 0.1) 

@@ -82,7 +82,7 @@ def create_e_car(occ: Occupancy, index: pd.DatetimeIndex) -> pd.Series:
     '''
     SOC wird gerade auf Abfahrtszeitpunkt gelegt, passt vllt auch?
     '''
-
+ 
     # # Setze SoC eine Stunde vor Abfahrt
     # soc_set.loc[departures.shift(-1, fill_value=False)] = 1.0
 
@@ -90,7 +90,7 @@ def create_e_car(occ: Occupancy, index: pd.DatetimeIndex) -> pd.Series:
     spill = pd.Series(0.0, index=charging.index)
     spill.loc[charging == 0] = 0.1 * charging_power  # 10% of charging power when not at home
 
-    return soc_set, spill, charging_power
+    return soc_set, spill, charging_power, charging
 
 
 def create_pv(env: Environment, peakpower: float, index: pd.DatetimeIndex, beta: float, gamma: str, area: float = 10.0, eta_noct: float = 0.15, meth: int = 1) -> pd.Series:

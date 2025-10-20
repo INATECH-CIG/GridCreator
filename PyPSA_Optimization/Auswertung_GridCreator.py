@@ -12,6 +12,7 @@ import geopandas as gpd
 import networkx as nx
 import os
 import pickle
+from pathlib import Path
 
 
 '''
@@ -22,8 +23,16 @@ pypsa_gurobi
 aktivieren!
 '''
 
+#%%
+
+# Basis: das Verzeichnis zu GridCreator
+this_dir = Path(__file__).parent
+
+# Pfad zur .nc-Datei
+file = this_dir / "output" / "grid_Schallstadt_GER_ecar.nc"
+
 #%% Pypsa netzwerk einlesen aus .nc datei
-network = pypsa.Network("../output/grid_Schallstadt_GER.nc")
+network = pypsa.Network(file)
 
 # #%% import area und features
 
@@ -90,51 +99,65 @@ network = pypsa.Network("../output/grid_Schallstadt_GER.nc")
 # for gen in gas_gens.index:
 #     network.generators.at[gen, 'p_nom_extendable'] = True
 
-# #%% Random bus mit Generator ziehen
-# random_bus_with_gen = network.generators.sample()
-# print("Zufälliger Bus mit Generator:", random_bus_with_gen['bus'].values[0])
-# # Filtern der Generatoren am Bus
-# gens_at_bus = [g for g in network.generators.index if g.startswith(random_bus_with_gen['bus'].values[0])]
-# # Loads für diesen bus extrahieren und summieren
-# loads_at_bus = network.loads[network.loads['bus'] == random_bus_with_gen['bus'].values[0]]
-# # Random hp ziehen
-# random_hp = network.generators[network.generators['carrier'] == 'HP'].sample()
-# hp = random_hp.index[0]
+#%% Random bus mit Generator ziehen
+random_bus_with_gen = network.generators.sample()
+print("Zufälliger Bus mit Generator:", random_bus_with_gen['bus'].values[0])
+# Filtern der Generatoren am Bus
+gens_at_bus = [g for g in network.generators.index if g.startswith(random_bus_with_gen['bus'].values[0])]
+# Loads für diesen bus extrahieren und summieren
+loads_at_bus = network.loads[network.loads['bus'] == random_bus_with_gen['bus'].values[0]]
+# Random hp ziehen
+random_hp = network.generators[network.generators['carrier'] == 'HP'].sample()
+hp = random_hp.index[0]
 
-# #%% Plotten von Gesamtlast und Gesamterzeugung an dem bus
-# fig, ax = plt.subplots(figsize=(10, 5))
-# # Last-Summe
-# load_sum = network.loads_t.p_set[loads_at_bus.index].iloc[744*3:744*4].sum(axis=1)
-# ax.plot(load_sum, label='Summe aller Lasten', color='blue', linewidth=2)
-# # Generation-Summe
-# gen_sum = (network.generators_t.p_max_pu[gens_at_bus].iloc[744*3:744*4]*network.generators.p_nom[gens_at_bus]).sum(axis=1)
-# ax.plot(gen_sum, label='Summe aller Generatoren', color='orange', linewidth=2)
-# ax.plot(network.generators_t.p_max_pu[hp].iloc[744*3:744*4]*network.generators.p_nom[hp], label='HeatPump', color='green', linewidth=2)
-# ax.set_title(f'Last und Generation an Bus {random_bus_with_gen["bus"].values[0]}')
-# ax.set_xlabel('Zeit')
-# ax.set_ylabel('Leistung (MW)')
-# ax.legend()
-# plt.show()
+#%% Plotten von Gesamtlast und Gesamterzeugung an dem bus
+fig, ax = plt.subplots(figsize=(10, 5))
+# Last-Summe
+load_sum = network.loads_t.p_set[loads_at_bus.index].iloc[744*3:744*4].sum(axis=1)
+ax.plot(load_sum, label='Summe aller Lasten', color='blue', linewidth=2)
+# Generation-Summe
+gen_sum = (network.generators_t.p_max_pu[gens_at_bus].iloc[744*3:744*4]*network.generators.p_nom[gens_at_bus]).sum(axis=1)
+ax.plot(gen_sum, label='Summe aller Generatoren', color='orange', linewidth=2)
+ax.plot(network.generators_t.p_max_pu[hp].iloc[744*3:744*4]*network.generators.p_nom[hp], label='HeatPump', color='green', linewidth=2)
+ax.set_title(f'Last und Generation an Bus {random_bus_with_gen["bus"].values[0]}')
+ax.set_xlabel('Zeit')
+ax.set_ylabel('Leistung (MW)')
+ax.legend()
+plt.show()
 
-# #%% Hp übers jahr plotten
-# fig, ax = plt.subplots(figsize=(10, 5))
-# ax.plot(network.generators_t.p_max_pu[hp]*network.generators.p_nom[hp], label='HeatPump', color='green', linewidth=2)
-# ax.set_title(f'HeatPump Leistung über das Jahr an Bus {random_bus_with_gen["bus"].values[0]}')
-# ax.set_xlabel('Zeit')
-# ax.set_ylabel('Leistung (MW)')
-# ax.legend()
-# plt.show()
+#%% Hp übers jahr plotten
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(network.generators_t.p_max_pu[hp]*network.generators.p_nom[hp], label='HeatPump', color='green', linewidth=2)
+ax.set_title(f'HeatPump Leistung über das Jahr an Bus {random_bus_with_gen["bus"].values[0]}')
+ax.set_xlabel('Zeit')
+ax.set_ylabel('Leistung (MW)')
+ax.legend()
+plt.show()
 
+#%%
+# random Store am bus ziehen
+store = "BranchTee_mvgd_33775_lvgd_3165700001_building_779406E-Car_Storage"
+
+#%%
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(network.stores_t.p[store], label='State of Charge', color='purple', linewidth=2)
+
+
+ax.set_title(f'State of Charge der Stores an Bus {random_bus_with_gen["bus"].values[0]}')
+ax.set_xlabel('Zeit')
+ax.set_ylabel('State of Charge (MWh)')
+ax.legend()
+plt.show()
 
 #%%
 
 # snapshots auf eine Woche verkürzen für schnellere Optimierung
-network.set_snapshots(network.snapshots[:800])
+network.set_snapshots(network.snapshots[:150])
 
-#%% 
-# alle Leitungen auf erweiterbar setzen
-for line in network.lines.index:
-    network.lines.at[line, 's_nom_extendable'] = True
+# #%% 
+# # alle Leitungen auf erweiterbar setzen
+# for line in network.lines.index:
+#     network.lines.at[line, 's_nom_extendable'] = True
 
 #%% 
 # # carrier vn E-Autos von E_Auto auf battery setzen
@@ -142,18 +165,39 @@ for line in network.lines.index:
 #     if network.storage_units.at[su, 'carrier'] == 'E_Auto':
 #         network.storage_units.at[su, 'carrier'] = 'battery'
 
-# %%
-# Alle storage units entfehrnen
-network.remove("StorageUnit", network.storage_units.index)
+# # %%
+# # Alle storage units entfernen
+# network.remove("Store", network.stores.index)
+
 
 # #%%
-# # Netzwerk speichern
-# network.export_to_netcdf("output/grid_Schallstadt_GER_optimize.nc")
+# # für alle Store e_nom_extendable = True
+
+# for su in network.stores.index:
+#     network.stores.at[su, 'e_nom_extendable'] = True
+
+# #%%
+# # für alle Links e_nom_extendable = True
+
+# for l in network.links.index:
+#     network.links.at[l, 'p_nom_extendable'] = True
+
+
+
+#%%
+# für alle Links p_max_pu = 1
+
+for l in network.links.index:
+    network.links_t.p_max_pu[l] = 1
+
 #%%
 '''
 Optimieren
 '''
 network.optimize(solver_name='gurobi', solver_options={'ResultFile':'model_all.ilp'}, snapshots=network.snapshots)
+#%%
+# Netzwerk speichern
+network.export_to_netcdf("output/grid_Schallstadt_GER_optimize_ecar.nc")
 
 #%% Plotten der Ergebnisse
 
