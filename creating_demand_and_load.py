@@ -66,8 +66,8 @@ def create_e_car(occ: Occupancy, index: pd.DatetimeIndex) -> pd.Series:
     # EV charges only when all residents are home
     charging_array = np.where(current_occupancy == max_occ, 1, 0)
 
-    # Assume 7 kW charging power, convert to MW
-    charging_power = 7e-3  # 7 kW → 0.007 MW
+    # Assume 11 kW charging power, convert to MW (https://www.solarwatt.de/ratgeber/bidirektionales-laden)
+    charging_power = 11e-3  # 11 kW → 0.011 MW
 
     # Convert charging array to Pandas Series to use .diff() and .loc
     charging = pd.Series(charging_array, index=index) 
@@ -130,7 +130,7 @@ def create_pv(env: Environment, peakpower: float, index: pd.DatetimeIndex, beta:
 
 
 
-def create_hp(index: pd.DatetimeIndex, env: Environment, hp_params=None, flow_temp=None, schedule=None) -> pd.Series:
+def create_hp(index: pd.DatetimeIndex, env: Environment, flow_temp=None, schedule=None) -> pd.Series:
     """
     Generates a heat pump power profile.
 
@@ -146,49 +146,80 @@ def create_hp(index: pd.DatetimeIndex, env: Environment, hp_params=None, flow_te
         pd.Series: Heat pump electric power in MW for each timestep.
     """
 
-    if hp_params is None:
-        '''
-        Werte aus
-        file:///home/matthiasbehr/Downloads/tl_en_technicky-list_ea-622m.pdf
-        RPS 50 Hz
-        '''
-        hp_params = {
-                    "t_ambient": np.array([12, 7, 2, -7, -15]),     
-                    "t_flow": np.array([35, 45, 55]),               
 
-                    # Heizleistung [kW]
-                    "heat": np.array([
-                        [13.50, 12.96, 12.41],   # 12 °C
-                        [10.30, 10.33, 10.35],   # 7 °C
-                        [8.27,  8.70,  9.12],    # 2 °C
-                        [7.29,  7.11,  6.93],    # -7 °C
-                        [5.77,  5.64,  5.51]     # -15 °C
-                    ]),
+    #     '''
+    #     Werte aus
+    #     file:///home/matthiasbehr/Downloads/tl_en_technicky-list_ea-622m.pdf
+    #     RPS 50 Hz
+    #     '''
 
-                    # Leistungsaufnahme [kW]
-                    "power": np.array([
-                        [2.49, 3.01, 3.52],      # 12 °C
-                        [2.27, 2.80, 3.32],      # 7 °C
-                        [2.19, 2.77, 3.35],      # 2 °C
-                        [2.18, 2.64, 3.10],      # -7 °C
-                        [2.07, 2.60, 3.12]       # -15 °C
-                    ]),
+    #     t_ambient = np.array([12, 7, 2, -7, -15])
+    #     t_flow = np.array([35, 45, 55])
 
-                    # COP
-                    "cop": np.array([
-                        [5.41, 4.31, 3.53],      # 12 °C
-                        [4.53, 3.69, 3.12],      # 7 °C
-                        [3.78, 3.14, 2.72],      # 2 °C
-                        [3.34, 2.69, 2.24],      # -7 °C
-                        [2.79, 2.17, 1.77]       # -15 °C
-                    ]),
-                    "t_max": 55,
-                    "lower_activation_limit": 0.5
-                }
+    #     # Heizleistung [kW]
+    #     heat = np.array([
+    #                     [13.50, 12.96, 12.41],   # 12 °C
+    #                     [10.30, 10.33, 10.35],   # 7 °C
+    #                     [8.27,  8.70,  9.12],    # 2 °C
+    #                     [7.29,  7.11,  6.93],    # -7 °C
+    #                     [5.77,  5.64,  5.51]     # -15 °C
+    #                 ])
 
+    #                 # Leistungsaufnahme [kW]
+    #     power = np.array([
+    #                     [2.49, 3.01, 3.52],      # 12 °C
+    #                     [2.27, 2.80, 3.32],      # 7 °C
+    #                     [2.19, 2.77, 3.35],      # 2 °C
+    #                     [2.18, 2.64, 3.10],      # -7 °C
+    #                     [2.07, 2.60, 3.12]       # -15 °C
+    #                 ])
+
+    #                 # COP
+    #     cop = np.array([
+    #                     [5.41, 4.31, 3.53],      # 12 °C
+    #                     [4.53, 3.69, 3.12],      # 7 °C
+    #                     [3.78, 3.14, 2.72],      # 2 °C
+    #                     [3.34, 2.69, 2.24],      # -7 °C
+    #                     [2.79, 2.17, 1.77]       # -15 °C
+    #                 ])
+    #     t_max = 55
+    #     lower_activation_limit = 0.5
+
+
+    '''
+    Werte aus
+    pyCity Beispiel
+    '''
+    heat = np.array([
+                    [2960, 2260, 2030],
+                    [3730, 3150, 2780],
+                    [5500, 4560, 3980],
+                    [7500, 6530, 5880],
+                    [9200, 8210, 7100],
+                    [10200, 8880, 7810],
+                    [11450, 10290, 9110],
+                    [12700, 11700, 10400]
+                ])
+    cop = np.array([
+
+                    [1.86, 1.42, 1.28],
+                    [2.16, 1.79, 1.51],
+                    [2.8, 2.28, 1.87],
+                    [3.7, 2.86, 2.45],
+                    [4.2, 3.62, 2.7],
+                    [4.5, 3.55, 2.95],
+                    [4.77, 4.04, 3.31],
+                    [5.29, 4.33, 3.48]
+                ])
+    power = heat / cop
+
+    t_ambient = np.array([-20, -15, -7, 2, 7, 10, 12, 20])
+    t_flow = np.array([35, 45, 55])
+    t_max = 55
+    lower_activation_limit = 0.5
 
     # Initialize heat pump
-    heatpump = hp.Heatpump(env, **hp_params)
+    heatpump = hp.Heatpump(env, t_ambient, t_flow, heat, power, cop, t_max, lower_activation_limit)
 
     # Default supply temperature over time
     if flow_temp is None:

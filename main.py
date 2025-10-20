@@ -1,5 +1,5 @@
 import main_functions as mf
-import input_data as ds
+import input_data as data
 
 import geopandas as gpd
 import pandas as pd
@@ -39,7 +39,7 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
     '''
 
     # STEP 0
-    path = ds.save_data()
+    path = data.save_data()
 
     # STEP 1
     if 1 in steps:        
@@ -110,8 +110,7 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
         if steps[-1] == 4:
             print(buses_df.head())
             return grid, buses_df, bbox, area, features
-        
-    
+
     return grid, buses_df, bbox, area, features
 
 #%%
@@ -153,79 +152,91 @@ right =  7.772647   # Left longitude
 
 grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)
 
-#%%
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import osmnx as ox
+grid.export_to_netcdf("output/grid_Schallstadt_GER.nc")
 
-network = grid
-
-fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
-# Netzplot
-network.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
-# OSM-Daten
-ox.plot_graph(area, ax=ax, show=False, close=False)
-features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
-# Liste von Generator-Kategorien: (Filter-Funktion, Farbe, Label)
-gen_categories = [
-    (lambda g: g['carrier'] == 'solar', 'yellow', 'Solar Generatoren'),
-    (lambda g: g['carrier'] == 'E_car', 'green', 'E-Car Generatoren'),
-    (lambda g: g['carrier'] == 'HP', 'blue', 'HP Generatoren'),
-    (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'solar'), 'purple', 'HP & Solar Generatoren'),
-    (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'E_car'), 'pink', 'HP & E-Car Generatoren'),
-    (lambda g: (g['carrier'] == 'solar') & (g['carrier'] == 'E_car'), 'violet', 'Solar & E-Car Generatoren')
-]
-
-for filt, color, label in gen_categories:
-    gens = network.generators[filt(network.generators)]
-    if not gens.empty:
-        buses = gens['bus'].unique()
-        coords = network.buses.loc[buses, ['x', 'y']]
-        ax.scatter(
-            coords['x'], coords['y'],
-            color=color,
-            s=20,
-            label=label,
-            zorder=5
-        )
-
-# Trafo-Busse markieren
-tra_buses = network.transformers['bus1'].unique()
-tra_coords = network.buses.loc[tra_buses][['x', 'y']]
-ax.scatter(
-    tra_coords['x'],
-    tra_coords['y'],
-    color='red',
-    s=10,         # Punktgröße
-    label='Transformers',
-    zorder=5      # überlagert andere Layer
-)
-
-
-ax.legend(loc='upper right')
-
-
-#%%
-grid.export_to_netcdf("input/dist_grid_for_optimize.nc")
+buses.to_csv("output/buses_Schallstadt_GER.csv")
 
 import networkx as nx
-nx.write_gpickle(area, "input/area_for_optimize.pkl") 
+nx.write_gpickle(area, "output/area_Schallstadt_GER.pkl") 
 
 import geopandas as gpd
-features.to_file("input/features_for_optimize.gpkg", driver="GPKG")
+features.to_file("output/features_Schallstadt_GER.gpkg", driver="GPKG")
 
+
+# #%%
+# import matplotlib.pyplot as plt
+# import cartopy.crs as ccrs
+# import osmnx as ox
+
+# network = grid
+
+# fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+# # Netzplot
+# network.plot(ax=ax, bus_sizes=1 / 2e9, margin=1000)
+# # OSM-Daten
+# ox.plot_graph(area, ax=ax, show=False, close=False)
+# features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
+# # Liste von Generator-Kategorien: (Filter-Funktion, Farbe, Label)
+# gen_categories = [
+#     (lambda g: g['carrier'] == 'solar', 'yellow', 'Solar Generatoren'),
+#     (lambda g: g['carrier'] == 'E_car', 'green', 'E-Car Generatoren'),
+#     (lambda g: g['carrier'] == 'HP', 'blue', 'HP Generatoren'),
+#     (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'solar'), 'purple', 'HP & Solar Generatoren'),
+#     (lambda g: (g['carrier'] == 'HP') & (g['carrier'] == 'E_car'), 'pink', 'HP & E-Car Generatoren'),
+#     (lambda g: (g['carrier'] == 'solar') & (g['carrier'] == 'E_car'), 'violet', 'Solar & E-Car Generatoren')
+# ]
+
+# for filt, color, label in gen_categories:
+#     gens = network.generators[filt(network.generators)]
+#     if not gens.empty:
+#         buses = gens['bus'].unique()
+#         coords = network.buses.loc[buses, ['x', 'y']]
+#         ax.scatter(
+#             coords['x'], coords['y'],
+#             color=color,
+#             s=20,
+#             label=label,
+#             zorder=5
+#         )
+
+# # Trafo-Busse markieren
+# tra_buses = network.transformers['bus1'].unique()
+# tra_coords = network.buses.loc[tra_buses][['x', 'y']]
+# ax.scatter(
+#     tra_coords['x'],
+#     tra_coords['y'],
+#     color='red',
+#     s=10,         # Punktgröße
+#     label='Transformers',
+#     zorder=5      # überlagert andere Layer
+# )
+
+
+# ax.legend(loc='upper right')
+
+
+# #%%
+# grid.export_to_netcdf("input/dist_grid_for_optimize.nc")
+
+# import networkx as nx
+# nx.write_gpickle(area, "input/area_for_optimize.pkl") 
+
+# import geopandas as gpd
+# features.to_file("input/features_for_optimize.gpkg", driver="GPKG")
+
+# # %%
+# # STEP 6
+# # .optimize()
+
+# # # Fix Capacity
+# # grid_1.optimize.fix_optimal_capacities()
+
+# # # Set snapshots für Optimierung
+# # start_time = pd.Timestamp("2023-01-01 00:00:00")
+# # end_time = pd.Timestamp("2023-01-07 23:00:00")
+# # snapshots = pd.date_range(start=start_time, end=end_time, freq='h')
+# # grid_1.set_snapshots(snapshots)
+
+# #
+# # grid_1.optimize()
 # %%
-# STEP 6
-# .optimize()
-
-# # Fix Capacity
-# grid_1.optimize.fix_optimal_capacities()
-
-# # Set snapshots für Optimierung
-# start_time = pd.Timestamp("2023-01-01 00:00:00")
-# end_time = pd.Timestamp("2023-01-07 23:00:00")
-# snapshots = pd.date_range(start=start_time, end=end_time, freq='h')
-# grid_1.set_snapshots(snapshots)
-
-#
-# grid_1.optimize()

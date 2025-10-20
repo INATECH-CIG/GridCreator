@@ -442,6 +442,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         bbox (list): Bounding box coordinates for environmental data.
         pfad (str): Path to the input data directory.
         env: Optional environmental data object. If None, it will be created based on the bbox and path.
+        method (int): Method for load generation. 0: generates 10 profiles per household type; randomly selects one for each household. 1: generates a new profile for each household.
 
     Returns:
         grid (pypsa.Network): The updated grid object with assigned loads.
@@ -466,12 +467,13 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     # Dictionary for adding loads
     load_cols = {}
     # Identify buses with electric vehicles
-    # e_car_buses = buses.index[buses["Power_E_car"].notna()].tolist()
-    #e_car_buses = buses.index[buses["Power_E_car"] > 0].tolist()
-
     # Expand list according to number of EVs per bus
-    e_car_buses = [bus for bus, row in buses.iterrows() for _ in range(int(row["Power_E_car"] // row["Factor_E_car"]))
-]
+    e_car_buses = [
+    bus
+    for bus, row in buses.iterrows()
+    if row["Factor_E_car"] > 0 and row["Power_E_car"] > 0  # Nur wenn Faktor > 0
+    for _ in range(int(row["Power_E_car"] // row["Factor_E_car"]))
+    ]
 
     e_car_soc = {}
     e_car_spill = {}
@@ -490,14 +492,23 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         # Generate for each household type 10 different profiles
         power_dict = {}
         occupants_dict = {}
-        for persons in household_types.values():
-            power_dict[persons] = {}
+
+        for key, persons in household_types.items():
+            if key == "Bus_6_Personen_und_mehr":
+                break
+            
+            # DataFrames to hold profiles
+            power_df = pd.DataFrame(index=snapshots)
             occupants_dict[persons] = {}
+
             for profile_number in range(1, 11):
                 power_series, occupancy_series = demand_load.create_haus(people=persons, index=snapshots, env=environment)
-                power_dict[persons][profile_number] = power_series
-                occupants_dict[persons][profile_number] = occupancy_series
-                print(f"Profile for {persons} persons, profile {profile_number} created.")
+                power_df[f"profile_{profile_number}"] = power_series
+                occupants_dict[persons][f"profile_{profile_number}"] = occupancy_series
+
+            # Store in dictionary
+            power_dict[persons] = power_df
+
 
     def house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method):
         """
@@ -526,9 +537,11 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             # Create household load using standard profiles
             # Select random number between 1 and 10 for different standard profiles
             profile_number = np.random.randint(1, 11)
-            power = power_dict[persons][profile_number]
-            occupants = occupants_dict[persons][profile_number]
-            print(f"Erstelle Last für {persons}-Personen-Haushalt am Bus {bus} mit Methode {method} (Standardprofile).")
+            profile_col = f"profile_{profile_number}"
+
+            # Select profile from dictionary
+            power = power_dict[persons][profile_col]
+            occupants = occupants_dict[persons][profile_col]
         else:
             power, occupants = demand_load.create_haus(people=persons, index=snapshots, env=environment)
         grid.add("Load", name=f"{bus}_load_{call_counter}", bus=bus, carrier="AC")
@@ -538,7 +551,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         # If the bus has electric vehicles, create an EV storage unit
         if bus in e_car_buses:
             soc_set, spill, charging_power = demand_load.create_e_car(occ = occupants, index=snapshots)
-            grid.add("StorageUnit", name=f"{bus}_E_Auto_{call_counter}", p_set = charging_power, bus=bus, carrier="E_Auto")
+            grid.add("StorageUnit", name=f"{bus}_E_Auto_{call_counter}", p_nom = charging_power, bus=bus, carrier="battery")
             e_car_soc[f"{bus}_E_Auto_{call_counter}"] = soc_set
             e_car_spill[f"{bus}_E_Auto_{call_counter}"] = spill
             if buses.loc[bus, 'Power_E_car'] <= buses.loc[bus, 'Factor_E_car']:
@@ -569,17 +582,13 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
                 persons = min(remaining_residents, 5)  # Nimm maximal 5 Personen für den Haushalt
                 buses, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_soc, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method)
 
-        # else:
-        #     print(f"Load für {bus} existiert bereits.")
-
     # Combine all generated profiles into PyPSA objects
     grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
     grid.storage_units_t.state_of_charge_set = pd.concat([grid.storage_units_t.state_of_charge_set, pd.DataFrame(e_car_soc)], axis=1)
     grid.storage_units_t.spill = pd.concat([grid.storage_units_t.spill, pd.DataFrame(e_car_spill)], axis=1)
 
-    """
-    Remove all existing solar generators before adding new ones.
-    """
+    # Assign solar generators based on bus data
+    # Remove all existing solar generators before adding new ones.
     grid.generators.drop(grid.generators.index[grid.generators['type'] == 'solar'], inplace=True)
 
     # Select all buses that have solar capacity
@@ -589,7 +598,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     for bus in solar_buses:
         print('Power_solar: ', buses.loc[bus, 'Power_solar'])
         if buses.loc[bus, 'Power_solar'] < 0.25:  # Minimum 0.25 kW
-            print('Power_solar zu klein, setze auf Minimum 0.25 kW')
+            print('Power_solar is less than 0.25, setting to 0.25')
             buses.loc[bus, 'Power_solar'] = 0.25
 
     solar_cols = {}
@@ -643,11 +652,13 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         # Create heat pump power time series
         power = demand_load.create_hp(index=snapshots, env=environment)
 
+        power_max = max(power)
+
         # Add heat pump generator to the grid
-        grid.add("Generator", name=bus + "_HP", bus=bus, carrier="HP", type="HP")
+        grid.add("Generator", name=bus + "_HP", bus=bus, carrier="HP", type="HP", p_nom = power_max)
 
         # Store the generated time series for later concatenation
-        hp_cols[bus + "_HP"] = power.values
+        hp_cols[bus + "_HP"] = power.values/power_max
 
     # Append all generated heat pump profiles to PyPSA time series data
     if hp_cols:
@@ -759,10 +770,10 @@ def pypsa_preparation(grid: pypsa.Network) -> pypsa.Network:
     grid.add("Carrier", "wind", co2_emissions=0, color="cyan")
     grid.add("Carrier", "battery", co2_emissions=0, color="gray")
     grid.add("Carrier", "AC", co2_emissions=0, color="black")  # Für Busse, Lasten, Leitungen
-
+    
 
     # Add gas generators and storage at transformers to simulate import and export from mv to lv
-    for i, trafo in grid.transformers.iterrows():
+    for i, trafo in grid.transformers[~grid.transformers.index.str.contains("reinforced", case=False, regex=True)].iterrows():
         bus_mv = trafo['bus0']
 
         gen_name = f"Generator_am_{i}"
@@ -781,13 +792,17 @@ def pypsa_preparation(grid: pypsa.Network) -> pypsa.Network:
                 name=storage_name,
                 bus=bus_mv,
                 carrier="battery",
-                p_min = -1,
-                p_max = 0,
+                p_min_pu = -1,
+                p_max_pu = 0,
                 p_nom_extendable=True,
                 capital_cost=500,
                 marginal_cost=50,
                 efficiency_store=0.9,
                 efficiency_dispatch=0.9)  
         
+    # Ensure all lines are extendable  
+    for line in grid.lines.index:
+        grid.lines.at[line, 's_nom_extendable'] = True
+
     return grid
 
