@@ -476,7 +476,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     ]
 
     e_car_charging = {}
-    e_car_spill = {}
+    e_car_driving = {}
 
     # Household sizes in a dictionary
     household_types = {
@@ -510,7 +510,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             power_dict[persons] = power_df
 
 
-    def house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method):
+    def house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method):
         """
         Creates a household load (and possibly EV load) for a given bus.
 
@@ -522,7 +522,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             remaining_residents (int): Number of residents left to assign.
             load_cols (dict): Dictionary storing household power profiles.
             e_car_charging (dict): Dictionary storing electric vehicle state of charge profiles.
-            e_car_spill (dict): Dictionary storing electric vehicle spill profiles.
+            e_car_driving (dict): Dictionary storing electric vehicle driving profiles.
             e_car_buses (list): List of buses that have electric vehicles.
             call_counter (int): Counter to ensure unique load names.
             grid (pypsa.Network): The network object.
@@ -530,7 +530,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             environment: Environmental data object.
 
         Returns:
-            Tuple: Updated (buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter)
+            Tuple: Updated (buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter)
         """
         call_counter += 1
         if method == 0:
@@ -550,38 +550,49 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
 
         # If the bus has electric vehicles, create an EV storage unit
         if bus in e_car_buses:
-            soc_set, spill, charging_power, charging = demand_load.create_e_car(occ = occupants, index=snapshots)
+            soc_set, load_driving, charging_power, charging = demand_load.create_e_car(occ = occupants, index=snapshots)
             # grid.add("StorageUnit", name=f"{bus}_E_Auto_{call_counter}", p_nom = charging_power, bus=bus, carrier="battery")
             # e_car_soc[f"{bus}_E_Auto_{call_counter}"] = soc_set
             # e_car_spill[f"{bus}_E_Auto_{call_counter}"] = spill
 
 
-            grid.add("Bus", f"{bus}E-Car", carrier="battery")
+            grid.add("Bus", f"{bus}_E-Car",
+                     x=grid.buses.at[bus, 'x'],# + 0.0001,
+                     y=grid.buses.at[bus, 'y']# + 0.0001
+            #, carrier="battery")
+                    )
+ 
+
             grid.add("Link", f"{bus}E-Car_Connector_charge", bus0=bus, bus1=f"{bus}E-Car",
                      p_nom=charging_power,
                      efficiency=0.95)
             e_car_charging[f"{bus}E-Car_Connector_charge"] = charging
+
+
+
             grid.add("Link", f"{bus}E-Car_Connector_discharge", bus0=f"{bus}E-Car", bus1=bus,
                      p_nom=charging_power,
                      efficiency=0.95)
+            
+
             e_car_charging[f"{bus}E-Car_Connector_discharge"] = charging
 
-            grid.add("Load", f"{bus}E-Car_Load", bus=f"{bus}E-Car",
-                # p_set=spill, 
-                index=snapshots)
-            e_car_spill[f"{bus}E-Car_Load"] = spill
 
+
+            grid.add("Load", f"{bus}E-Car_Load", bus=f"{bus}E-Car",
+                # p_set=spill
+                # carrier="battery"
+                )
+            e_car_driving[f"{bus}E-Car_Load"] = load_driving
+
+
+            battery_max = 77*1e-3 # MWh https://www.enbw.com/blog/elektromobilitaet/laden/wie-gross-muss-die-batterie-fuer-mein-elektroauto-sein/
             grid.add("Store", f"{bus}E-Car_Storage",
                 bus=f"{bus}E-Car",
-                e_nom=77*1e-3, # MWh https://www.enbw.com/blog/elektromobilitaet/laden/wie-gross-muss-die-batterie-fuer-mein-elektroauto-sein/
-                e_initial=77*1e-3,
-                efficiency_store=0.9,
-                efficiency_dispatch=0.9,
-                self_discharge=0.01)
-
-
-
-
+                e_nom=battery_max,
+                e_initial=battery_max,                
+                e_cyclic=False,
+                e_cyclic_per_period=False)
 
 
 
@@ -593,7 +604,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             else:
                 buses.loc[bus, 'Power_E_car'] -= buses.loc[bus, 'Factor_E_car']
 
-        return buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter
+        return buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter
 
     # Assign loads and EVs to each bus
     for bus in buses.index:
@@ -608,19 +619,20 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
                 n_households = int(buses.loc[bus, household_type])
                 if n_households > 0:
                     for i in range(n_households):
-                        buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter = house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method)
+                        buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
 
 
             while remaining_residents > 0:
                 persons = min(remaining_residents, 5)  # Nimm maximal 5 Personen für den Haushalt
-                buses, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_spill, e_car_buses, call_counter, grid, snapshots, environment, method)
+                buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
 
     # Combine all generated profiles into PyPSA objects
     grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
     # grid.storage_units_t.state_of_charge_set = pd.concat([grid.storage_units_t.state_of_charge_set, pd.DataFrame(e_car_soc)], axis=1)
     # grid.storage_units_t.spill = pd.concat([grid.storage_units_t.spill, pd.DataFrame(e_car_spill)], axis=1)
-    grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(e_car_spill)], axis=1)
+    grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(e_car_driving)], axis=1)
     grid.links_t.p_max_pu = pd.concat([grid.links_t.p_max_pu, pd.DataFrame(e_car_charging)], axis=1)
+
 
     # Assign solar generators based on bus data
     # Remove all existing solar generators before adding new ones.
@@ -663,7 +675,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             # Maximum power
             power_max= max(power)
             
-            grid.add("Generator", name=bus + "_solar", bus=bus, carrier="solar", type="solar", p_nom=power_max)
+            grid.add("Generator", name=bus + "_solar", bus=bus, carrier="solar", p_nom=power_max)
             # Normalise power profile to per unit values
             solar_cols[bus + "_solar"] = power.values/power_max
 
@@ -676,7 +688,8 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     # Append all generated PV profiles to PyPSA time series data
     if solar_cols:
         grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
-        grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
+        # Solar can be shut down: minimum power is zero and nor equal to maximum power
+        # grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
 
 
     # Select all buses that have non-zero heat pump capacity
@@ -690,7 +703,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         power_max = max(power)
 
         # Add heat pump generator to the grid
-        grid.add("Generator", name=bus + "_HP", bus=bus, carrier="HP", type="HP", p_nom = power_max)
+        grid.add("Generator", name=bus + "_HP", bus=bus, p_nom = power_max)
 
         # Store the generated time series for later concatenation
         hp_cols[bus + "_HP"] = power.values/power_max
@@ -738,7 +751,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             if building_type in commercial_dict:
                 load_type = commercial_dict[building_type]
                 power = demand_load.create_commercial(load_type, demand_per_year=1000, index=snapshots, env=environment)
-                grid.add("Load", name=bus + "_commercial", bus=bus, carrier="commercial")
+                grid.add("Load", name=bus + "_commercial", bus=bus)
                 commercial_cols[bus + "_commercial"] = power.values
 
         # Append commercial load profiles
@@ -757,7 +770,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             else:
                 power = demand_load.create_commercial('G4', demand_per_year=1000, index=snapshots, env=environment)
             
-            grid.add("Load", name=bus + "_Shop", bus=bus, carrier="Shop")
+            grid.add("Load", name=bus + "_Shop", bus=bus)
             shops_cols[bus + "_Shop"] = power.values
     
         # Append shop load profiles
@@ -800,12 +813,11 @@ def pypsa_preparation(grid: pypsa.Network) -> pypsa.Network:
 
 
     # Add common carriers
-    grid.add("Carrier", "gas", co2_emissions=0, color="orange")
+    grid.add("Carrier", "mv", co2_emissions=0.198, color="orange")
     grid.add("Carrier", "solar", co2_emissions=0, color="yellow")
-    grid.add("Carrier", "wind", co2_emissions=0, color="cyan")
-    grid.add("Carrier", "battery", co2_emissions=0, color="gray")
+    # grid.add("Carrier", "battery", co2_emissions=0, color="gray")
     grid.add("Carrier", "AC", co2_emissions=0, color="black")  # Für Busse, Lasten, Leitungen
-    
+    grid.add("Carrier", "external_supercharger", co2_emissions=0, color="pink")
 
     # Add gas generators and storage at transformers to simulate import and export from mv to lv
     for i, trafo in grid.transformers[~grid.transformers.index.str.contains("reinforced", case=False, regex=True)].iterrows():
@@ -815,7 +827,7 @@ def pypsa_preparation(grid: pypsa.Network) -> pypsa.Network:
         grid.add("Generator",
                 name=gen_name,
                 bus=bus_mv,
-                carrier="gas",
+                carrier="mv",
                 p_nom=100,
                 p_nom_extendable=True,
                 capital_cost=500,
@@ -826,7 +838,7 @@ def pypsa_preparation(grid: pypsa.Network) -> pypsa.Network:
         grid.add("Generator",
                 name=storage_name,
                 bus=bus_mv,
-                carrier="battery",
+                carrier="mv",
                 p_min_pu = -1,
                 p_max_pu = 0,
                 p_nom_extendable=True,
@@ -834,10 +846,27 @@ def pypsa_preparation(grid: pypsa.Network) -> pypsa.Network:
                 marginal_cost=50,
                 efficiency_store=0.9,
                 efficiency_dispatch=0.9)  
-        
+
+    # Ensure all transformers are extendable
+    for trafo in grid.transformers.index:
+        grid.transformers.at[trafo, 's_nom_extendable'] = True
+
+    # External supercharger for electrical vehicles
+    for l in grid.stores.index:
+        grid.add("Generator", name=f'external_supercharger_{l}',bus=grid.stores.loc[l, 'bus'],
+                carrier="external_supercharger",
+                p_nom=500,
+                p_nom_extendable=True,
+                marginal_cost=300,
+                efficiency=0.95
+                )
+
+
     # Ensure all lines are extendable  
     for line in grid.lines.index:
         grid.lines.at[line, 's_nom_extendable'] = True
+
+    
 
     return grid
 
