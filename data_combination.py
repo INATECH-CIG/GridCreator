@@ -8,6 +8,9 @@ import networkx as nx
 # import for type hints
 import pypsa
 
+'''
+Module for combining grid data with OSM data based on spatial proximity.
+'''
 
 def generator_duplikate_zusammenfassen(grid: pypsa.Network) -> pypsa.Network:
     """

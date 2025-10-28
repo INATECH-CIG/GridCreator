@@ -21,10 +21,9 @@ from pycity_base.classes.environment import Environment
 # Import for type hints
 import pypsa
 
-#%% Funktionen zum aufrufen
-
-
-
+'''
+Skript with functions for grid creation and data combination.
+'''
 
 
 '''
@@ -147,6 +146,22 @@ def federal_state(buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
         buses[col] = data.iloc[idx][col].values
 
     return buses
+
+def epsg4326_zu_epsg3035(lon: float, lat: float) -> tuple[float, float] :
+    """
+    Umrechnung von WGS84 (EPSG:4326) zu ETRS89 (EPSG:3035)
+
+    Args:
+        lon (float or pd.Series): Längengrad in WGS84.
+        lat (float or pd.Series): Breitengrad in WGS84.
+    
+    Returns:
+        tuple: Ein Tupel mit den umgerechneten Koordinaten (rechtswert, hochwert) in ETRS89 (EPSG:3035).
+    """
+
+    transformer_zu_EPSG3035 = Transformer.from_crs("EPSG:4326", "EPSG:3035", always_xy=True)
+    rechtswert, hochwert = transformer_zu_EPSG3035.transform(lon, lat)
+    return rechtswert, hochwert
 
 
 def zensus_ID(buses: pd.DataFrame, folder: str) -> pd.DataFrame:
@@ -367,303 +382,6 @@ def load_zensus(buses: pd.DataFrame, folder: str) -> pd.DataFrame:
     return buses
 
 
-def epsg4326_zu_epsg3035(lon: float, lat: float) -> tuple[float, float] :
-    """
-    Umrechnung von WGS84 (EPSG:4326) zu ETRS89 (EPSG:3035)
-
-    Args:
-        lon (float or pd.Series): Längengrad in WGS84.
-        lat (float or pd.Series): Breitengrad in WGS84.
-    
-    Returns:
-        tuple: Ein Tupel mit den umgerechneten Koordinaten (rechtswert, hochwert) in ETRS89 (EPSG:3035).
-    """
-
-    transformer_zu_EPSG3035 = Transformer.from_crs("EPSG:4326", "EPSG:3035", always_xy=True)
-    rechtswert, hochwert = transformer_zu_EPSG3035.transform(lon, lat)
-    return rechtswert, hochwert
-
-# def epsg32632_zu_epsg3035(lon: float, lat: float) -> tuple[float, float]:
-#     """
-#     Umrechnung von WGS84 (EPSG:32632) zu ETRS89 (EPSG:3035)
-#     Args:
-#         lon (float or pd.Series): Längengrad in WGS84.
-#         lat (float or pd.Series): Breitengrad in WGS84.
-    
-#     Returns:
-#         tuple: Ein Tupel mit den umgerechneten Koordinaten (rechtswert, hochwert) in ETRS89 (EPSG:3035).
-#     """
-
-#     transformer_zu_EPSG3035 = Transformer.from_crs("EPSG:32632", "EPSG:3035", always_xy=True)
-#     rechtswert, hochwert = transformer_zu_EPSG3035.transform(lon, lat)
-#     return rechtswert, hochwert
-
-
-# def zensus_df_verbinden(daten_zensus: list) -> pd.DataFrame:
-#     """
-#     Verbindet mehrere DataFrames basierend auf der GITTER_ID_100m Spalte.
-    
-#     Args:
-#         daten_zensus (list): Eine Liste von DataFrames, die auf GITTER_ID_100m basieren.
-
-#     Returns:
-#         pd.DataFrame: Ein DataFrame, das die Daten aus allen DataFrames kombiniert.
-#     """
-
-#     # Sicherstellen, dass alle DFs die gleichen drei Schlüsselspalten haben
-#     basis_spalten = ["GITTER_ID_100m", "x_mp_100m", "y_mp_100m"]
-
-#     # DataFrames per GITTER_ID_100m zusammenführen
-#     df_vereint = reduce(lambda left, right: pd.merge(left, right, on=basis_spalten, how='outer'), daten_zensus)
-#     df_vereint = df_vereint.rename(columns={col: f"Zensus_{col}" for col in df_vereint.columns if col not in basis_spalten})
-#     return df_vereint
-
-
-
-
-# def daten_zuordnen(net_buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
-#     """
-#     Ordnet die Zensusdaten den Bussen im Netzwerk zu, basierend auf den Koordinaten.
-    
-#     Args:
-#         net_buses (pd.DataFrame): DataFrame mit den Busdaten des Netzwerks.
-#         data (pd.DataFrame): DataFrame mit den Zensusdaten.
-        
-#     Returns:
-#         pd.DataFrame: DataFrame mit den zugeordneten Zensusdaten.
-#     """
-
-#     x_array, y_array = epsg4326_zu_epsg3035(net_buses["x"], net_buses["y"])
-
-#     # Referenzpunkte in der Zensus-Tabelle
-#     reference_points = np.vstack((data['x_mp_100m'].values, data['y_mp_100m'].values)).T
-#     tree = spatial.cKDTree(reference_points)
-
-#     # Zielpunkte aus dem Netz
-#     query_points = np.vstack((x_array, y_array)).T
-
-#     # Nächste Nachbarn finden
-#     distances, indices = tree.query(query_points)
-
-#     # Spaltennamen ändern
-#     # data = data.rename(columns=lambda col: f"Zensus_{col}").copy()
-    
-#     # Passende Zeilen aus data holen
-#     matched_data = data.iloc[indices].copy()
-
-#     # Index an net_buses anpassen, damit concat funktioniert
-#     matched_data.index = net_buses.index
-
-#     # DataFrames nebeneinander anfügen
-#     result = pd.concat([net_buses, matched_data], axis=1)
-
-#     return result
-
-
-
-# def load_shapes(datei: str, bundesland: str) -> gpd.GeoDataFrame:
-#     """
-#     Lädt die Bundesland-Geometrien aus einer GeoJSON-Datei und filtert sie auf die relevanten Bundesländer.
-#     Args:
-#         datei (str): Pfad zur GeoJSON-Datei mit den Bundesland-Geometrien.
-        
-#     Returns:
-#         gpd.GeoDataFrame: Ein GeoDataFrame mit den Geometrien der relevanten Bundesländer.
-#     """
-
-#     # Laden der Geometrien aus der Datei
-#     shapes = gpd.read_file(datei, layer="vg5000_lan")
-    
-#     # Filtern der Geometrien nach Bundesländern
-#     land = shapes[shapes["GEN"].isin([bundesland])]
-#     # Filtern der Geometrien
-#     land_aggregiert = land.dissolve(by="GEN")
-#     land_umrisse = land_aggregiert[["geometry"]]
-#     land_3035 = land_umrisse.to_crs(epsg=3035)
-
-#     return land_3035
-
-
-# def sum_mw(df):
-#     """
-#     Summiert die Werte in einem DataFrame und berechnet den Mittelwert für Spalten,
-#     die mit '_mw' enden. Für andere Spalten wird die Summe berechnet
-    
-#     Args:
-#         df (pd.DataFrame): DataFrame mit den zu summierenden Werten.
-        
-#     Returns:
-#         pd.DataFrame: Ein DataFrame mit den summierten Werten.
-#     """
-
-#     result = pd.DataFrame(columns=df.columns)
-#     row = {}
-
-#     for col in df.columns:
-#         values = df[col]
-#         if col.endswith('_mw'):
-#             row[col] = values.mean()
-#         else:
-#             row[col] = values.sum()
-
-#     result.loc[0] = row
-#     return result
-
-
-
-# def bundesland_zuordnung(ordner: str, shapes: gpd.GeoDataFrame) -> pd.DataFrame:
-#     """
-#     Ordnet die Zensusdaten den Bundesländern zu, basierend auf den Geometrien der Bundesländer.
-#     Args:
-#         zensus (pd.DataFrame): DataFrame mit den Zensusdaten.
-#         shapes (gpd.GeoDataFrame): GeoDataFrame mit den Geometrien der Bundesländer.
-        
-#     Returns:
-#         pd.DataFrame: Ein DataFrame mit den zugeordneten Bundesland-Daten."""
-
-#     # Zensusdaten laden
-#     zensus = pd.read_csv(ordner + "/Zensus2022_Bevoelkerungszahl_100m-Gitter.csv", sep=";")
-    
-#     # Punkte-Geometrie erstellen
-#     geometry = gpd.GeoSeries(gpd.points_from_xy(zensus['x_mp_100m'], zensus['y_mp_100m']))
-    
-#     # Boolean-Maske: welche Punkte liegen innerhalb der Bundesländer
-#     mask = geometry.within(shapes.unary_union)
-    
-#     # Nur diese Zeilen auswählen
-#     zensus_filtered = zensus[mask].copy()
-
-#     gitter_id = zensus_filtered["GITTER_ID_100m"]
-
-#     return gitter_id
-
-
-
-# def bundesland_summieren(df: pd.DataFrame, bundesland: str) -> pd.DataFrame:
-#     """
-#     Summiert die Zensusdaten für ein bestimmtes Bundesland.
-    
-#     Args:
-#         df (pd.DataFrame): DataFrame mit den Zensusdaten.
-#         bundesland (str): Der Name des Bundeslands, für das die Daten summiert werden
-        
-#     Returns:
-#         pd.DataFrame: Ein DataFrame mit den summierten Zensusdaten für das Bundesland
-#     """
-
-    
-#     numerische_spalten = [col for col in df.columns if col.startswith("Zensus")]
-
-#     for col in numerische_spalten:
-#         # Komma durch Punkt ersetzen, Strings in float konvertieren
-#         df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
-#         # Ungültige Zeichen wie "–" in NaN umwandeln
-#         df[col] = pd.to_numeric(df[col], errors="coerce")
-#         # NaN durch 0 ersetzen
-#         df[col] = df[col].fillna(0)
-
-#     print(df)
-#     df_agg = df[numerische_spalten].agg(agg_dict)
-#     df_neu = pd.DataFrame()
-#     df_neu[bundesland] = df_agg
-
-#     return df_neu
-
-
-# def gewichtungsfaktor(land: str, kategorien_eigenschaften: pd.DataFrame, factors: dict, row: pd.Series, technik_faktoren: pd.Series, gesamtgewicht_dict: dict) -> float:
-#     """
-#     Berechnet den Gewichtungsfaktor für eine bestimmte Technik und ein bestimmtes Land basierend auf den Eigenschaften und Faktoren.
-    
-#     Args:
-#         land (str): Der Name des Landes, für das der Faktor berechnet wird.
-#         kategorien_eigenschaften (pd.DataFrame): DataFrame mit den Kategorien der Eigenschaften.
-#         factors (dict): Dictionary mit den Faktoren für jede Kategorie.
-#         row (pd.Series): Eine Zeile des DataFrames, die die Eigenschaften enthält.
-#         technik_faktoren (pd.Series): Serie mit den Technik-Faktoren für das Land.
-#         gesamtgewicht_dict (dict): Dictionary mit den Gesamtgewichten für jede Kategorie und Land.
-        
-#     Returns:
-#         float: Der berechnete Gewichtungsfaktor für die Technik im angegebenen Land.
-#     """
-
-#     weighted_sum = 1.0
-#     # Iteriere über die Kategorien
-#     for kat in kategorien_eigenschaften.columns:
-#         # Filtere die Eigenschaften für die aktuelle Kategorie
-#         eigenschaften = kategorien_eigenschaften[kat].dropna()
-
-#         # hole nur die relevanten Faktoren und Werte
-#         faktoren_kat = [factors[attr] for attr in eigenschaften]
-#         werte_kat = row[eigenschaften]
-
-#         # numerische Multiplikation
-#         sum_bus = (werte_kat * faktoren_kat).sum()
-#         sum_land = gesamtgewicht_dict.get((land, kat), 0)
-
-#         # Berechnung von Gewichtungsprodukt
-#         if sum_land != 0:
-#             weighted_sum *= sum_bus / sum_land
-#         else:
-#             weighted_sum *= 0
-
-#     print("Technik Faktoren:", technik_faktoren)
-
-#     return weighted_sum * float(technik_faktoren.iloc[0])
-
-
-
-
-# def calculate_factors(df: pd.DataFrame, factors: dict, kategorien_eigenschaften: pd.DataFrame, Bev_data: pd.DataFrame, technik: str) -> pd.DataFrame:
-
-#     """
-#     Berechnet den Faktor für jede Zeile im DataFrame basierend auf den Eigenschaften und Bevölkerungsdaten.
-
-#     Parameters:
-#         df (pd.DataFrame): DataFrame mit den Eigenschaften der Busse.
-#         factors (dict): Dictionary mit den Faktoren für die Eigenschaften.
-#         kategorien_eigenschaften (pd.DataFrame): DataFrame mit den Eigenschaften, die gefiltert werden sollen.
-#         Bev_data (pd.DataFrame): DataFrame mit den Bevölkerungsdaten.
-#         technik (str): Technik, für die der Faktor berechnet werden soll.
-
-#     Returns:
-#         pd.DataFrame: DataFrame mit den berechneten Faktoren für die jeweilige Technik.
-#     """
-
-#     #Bev_data = Bev_data.set_index('GEN')
-#     #  Extrahiere die Technik-Faktoren für jedes Bundesland -> verhindert mehrfaches Suchen in For Loop
-#     technik_faktoren = Bev_data[technik]
-
-#     # Dictionary für die Gesamtgewichte -> verhindert mehrfaches Suchen in For Loop
-#     gesamtgewicht_dict = {}
-#     for kat in kategorien_eigenschaften.columns:
-#         eigenschaften = kategorien_eigenschaften[kat].dropna()
-#         faktoren_kat = [factors[attr] for attr in eigenschaften]
-        
-#         for land in Bev_data.index:
-#             land_werte = Bev_data.loc[land, eigenschaften]
-#             gewicht = (land_werte * faktoren_kat).sum()
-#             gesamtgewicht_dict[(land, kat)] = gewicht
-
-#     # Leeres DataFrame mit Zeilen wie df, für jedes Land eine Spalte
-#     faktor_pro_bus = pd.Series(index=df.index, dtype=float)
-
-#     # Iteriere über jeden Bus im DataFrame
-#     for idx, row in df.iterrows():
-#         land = row['lan_name']
-
-#         faktor_pro_bus.at[idx] = gewichtungsfaktor(land, kategorien_eigenschaften, factors, row, technik_faktoren, gesamtgewicht_dict)
-
-
-#     # Berechnung für Bundesland
-#     summen = df.iloc[:, 1:].agg(agg_dict)
-#     erste_spalte = {df.columns[0]: df.iloc[0, 0]}
-#     neue_zeile = {**erste_spalte, **summen.to_dict()}    
-#     zeile = pd.DataFrame([neue_zeile])
-
-#     land_bbox = zeile.iloc[0]['lan_name']
-#     faktor_bbox = gewichtungsfaktor(land_bbox, kategorien_eigenschaften, factors, zeile.iloc[0], technik_faktoren, gesamtgewicht_dict)
-
-#     return faktor_pro_bus, faktor_bbox
 
 
 

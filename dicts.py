@@ -1,4 +1,6 @@
-# Liste aller dictionaries
+'''
+Module containing dictionaries for solar orientation and aggregation methods.
+'''
 
 solar_dict={
     'Süd': 0,

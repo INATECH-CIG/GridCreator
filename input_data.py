@@ -1,6 +1,10 @@
 import zipfile
 from pathlib import Path
 
+'''
+Module for managing input data by extracting it from a ZIP file if necessary.
+'''
+
 def save_data():
     """
     Ensures the input data is available locally by extracting it from a ZIP file

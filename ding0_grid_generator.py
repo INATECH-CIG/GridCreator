@@ -6,6 +6,10 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+'''
+Module for extracting low-voltage subnetworks from a PyPSA network based on proximity to transformers.
+'''
+
 def extract_lv_subnetwork_to_nearest_transformers(start_buses: pd.DataFrame, path: str) -> pypsa.Network:
     """
     Extracts the low-voltage (LV) subnetwork that connects the given start buses

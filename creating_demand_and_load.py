@@ -9,9 +9,12 @@ import pycity_base.classes.supply.heat_pump as hp
 
 from pycity_base.classes.environment import Environment
 
+'''
+Module for creating demand and load profiles for different technologies.
+'''
 
 #%%
-def create_haus(env: Environment, people: int, index: pd.DatetimeIndex, light_config: int = 10, meth: int = 2, weather_file=None) -> (pd.Series, Occupancy):
+def create_appartment(env: Environment, people: int, index: pd.DatetimeIndex, light_config: int = 10, meth: int = 2, weather_file=None) -> (pd.Series, Occupancy):
     """
     Generates the electrical load profile for a household based on occupancy and stochastic appliance usage.
 
@@ -72,25 +75,11 @@ def create_e_car(occ: Occupancy, index: pd.DatetimeIndex) -> pd.Series:
     # Convert charging array to Pandas Series to use .diff() and .loc
     charging = pd.Series(charging_array, index=index) 
 
-    # Setting state of charge = 1 at departure times (1 → 0)
-    change = charging.diff()
-    departures = (change == -1)
-
-    soc_set = pd.Series(np.nan, index=charging.index)
-    soc_set.loc[departures] = 1.0
-
-    '''
-    SOC wird gerade auf Abfahrtszeitpunkt gelegt, passt vllt auch?
-    '''
- 
-    # # Setze SoC eine Stunde vor Abfahrt
-    # soc_set.loc[departures.shift(-1, fill_value=False)] = 1.0
-
     # Energy loss during absence (spill)
     spill = pd.Series(0.0, index=charging.index)
     spill.loc[charging == 0] = 0.1 * charging_power  # 10% of charging power when not at home
 
-    return soc_set, spill, charging_power, charging
+    return spill, charging_power, charging
 
 
 def create_pv(env: Environment, peakpower: float, index: pd.DatetimeIndex, beta: float, gamma: str, area: float = 10.0, eta_noct: float = 0.15, meth: int = 1) -> pd.Series:

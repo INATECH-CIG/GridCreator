@@ -4,10 +4,13 @@ import input_data as data
 import geopandas as gpd
 import pandas as pd
 
-
+'''
+Main module for the GridCreator tool.
+Handles the overall workflow including data preparation, grid creation, technology assignment, load profile generation.
+'''
 
 #%%
-def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2,3,4,5], technologies=['solar', 'E_car', 'HP'], load_method: int = 0, buses_df = pd.DataFrame(), area = gpd.GeoDataFrame(), features = gpd.GeoDataFrame()) -> tuple:
+def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2,3,4,5], technologies=['solar', 'E_car', 'HP'], load_method: int = 0, buses_df = pd.DataFrame()) -> tuple:
     '''
     Main function for GridCreator  
     Steps:
@@ -26,25 +29,32 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
         right: Right longitude
         steps: List of steps to execute (1-5)
         technologies: List of technologies to consider (e.g., ['solar', 'E_car', 'HP'])
-        load_method: Method for load profile generation (0: predefined profiles, 1: generating individual profiles)
+        load_method: Method for load profile generation (0: Creation of 10 individual profiles for each household type, random assignment of profiles to each household type
+                                                         1: Creation of individual profiles for each household)
         buses_df: DataFrame containing buses and related data (optional, default is empty DataFrame)
-        area: GeoDataFrame containing the area (optional, default is empty GeoDataFrame)
-        features: GeoDataFrame containing features (optional, default is empty GeoDataFrame)
-
+                  Ability to provide pre-populated buses_df to skip step 2 or manipulated data after executing step 2
         
     Returns:
         grid_1: PyPSA grid
-        buses_df: DataFrame containing buses and related data
+        buses_df: DataFrame containing buses and related data (created/modified in steps 2-4)
         bbox_1: Bounding box of the selected area
+        area: GeoDataFrame containing OSM area data (created in step 2)
+        features: GeoDataFrame containing OSM feature data (created in step 2)
     '''
 
     # STEP 0
     path = data.save_data()
 
+    # Define bounding box
+    bbox = [left, bottom, right, top]
+
+    # Initialize empty variables
+    area = gpd.GeoDataFrame()
+    features = gpd.GeoDataFrame()
+
     # STEP 1
     if 1 in steps:        
         #Grid creation
-        bbox = [left, bottom, right, top]
         grid, bbox = mf.ding0_grid(bbox, path)
 
         # Check if pypsa network is empty
@@ -54,8 +64,6 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
         
         # Return if only Step 1 is selected
         if steps[-1] == 1:
-
-            print(buses_df.head())
             return grid, buses_df, bbox, area, features
 
     # STEP 2
@@ -65,18 +73,15 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
         buffer = 0.0002  # corresponds to approximately 20 m
         buses_df, area, features = mf.osm_data(grid, bbox, buffer)
         # Federal state data
-        gpd_federal_state = gpd.read_file(f"{path}/input/georef-germany-postleitzahl.geojson")
-        buses_df = mf.data_assignment(buses_df, gpd_federal_state, path)
+        buses_df = mf.data_assignment(buses_df, path)
 
         # Return if Step 2 is the last selected step
         if steps[-1] == 2:
-            print(buses_df.head())
             return grid, buses_df, bbox, area, features
         
     
     # STEP 3
     if 3 in steps:
-        # Assign technologies
         # Define technologies
         gcp = technologies # gcp = generation and consumption plants
         # Assign technologies
@@ -87,7 +92,6 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
 
         # Return if Step 3 is the last selected step
         if steps[-1] == 3:
-            print(buses_df.head())
             return grid, buses_df, bbox, area, features
         
     
@@ -98,18 +102,12 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
 
         # Return if Step 4 is the last selected step
         if steps[-1] == 4:
-            print(buses_df.head())
             return grid, buses_df, bbox, area, features
 
     # STEP 5
     if 5 in steps:
         # Prepare grid for pysa.optimize()
         grid = mf.pypsa_preparation(grid)
-
-        # Return if Step 4 is the last selected step
-        if steps[-1] == 4:
-            print(buses_df.head())
-            return grid, buses_df, bbox, area, features
 
     return grid, buses_df, bbox, area, features
 
