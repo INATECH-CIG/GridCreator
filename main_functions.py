@@ -417,21 +417,26 @@ def gcp_fill(buses: pd.DataFrame, gcp: List[str], p_total: List[float], pfad: st
     """
 
     # Load PV and storage data per postal code
-    pv_plz = pd.read_csv(f"{pfad}/input/mastr_values_per_plz.csv", sep=",").set_index("PLZ")
-    plz = int(buses['plz_code'].values[0])
-    solar_power = pv_plz.loc[plz, 'Mean_Solar_Installed_Capacity_[MW]']
+    pv_plz = pd.read_csv(f"{pfad}/input/mastr_values_per_plz.csv", sep=",", dtype={"PLZ": str}).set_index("PLZ")
+    buses = buses.copy()
+    buses["plz_code"] = buses["plz_code"].astype(str)
 
-    # Change from MW to kW
-    solar_power = solar_power * 1000
+    # Identifying unique postal codes
+    unique_plz = buses['plz_code'].unique()
+    # Prepare DataFrames for solar power and storage per PV
+    solar_power = pd.DataFrame(index=unique_plz, columns=['Mean_Solar_Installed_Capacity_[kW]'])
+    storage_pv = pd.DataFrame(index=unique_plz, columns=['Storage_per_PV'])
+    for plz in unique_plz:
+        solar_power.at[plz, 'Mean_Solar_Installed_Capacity_[kW]'] = pv_plz.loc[plz, 'Mean_Solar_Installed_Capacity_[MW]']*1000 # Change from MW to kW
+        storage_pv.at[plz, 'Storage_per_PV'] = pv_plz.loc[plz, 'Storage_per_PV']
 
     for gcp_1, p in zip(gcp, p_total):
         buses = func.sort_gcp(buses, gcp_1, p, solar_power)
 
     # Determine solar orientation (e.g., south, east, west)
-    buses = func.solar_orientation(buses, plz, pv_plz)
+    buses = func.solar_orientation(buses, unique_plz, pv_plz)
 
     # Assign storage according to PV ratio
-    storage_pv = pv_plz.loc[plz, 'Storage_per_PV']
     buses = func.storage(buses, storage_pv)
 
     return buses

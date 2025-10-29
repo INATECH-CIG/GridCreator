@@ -445,19 +445,20 @@ def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame,
 
     # Extract technology-specific population data
     data_gcp = data[technik].copy()
-    # Compute factor for the area
-    id = id_df.iloc[0]
-    factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
 
     # Calculate factors for each bus
     for j, zensus in buses.iterrows():
         id = id_df.loc[j]
+        factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
         factor_bus = zensus @ gcp_factors.loc[technik]
         if factor_bus < 0:
             factor_bus = 0
         arr_factor.loc[j] = factor_bus / factor_area * data_gcp.loc[id]
 
     # Compute factor for the bounding box
+    # Using the mode of the IDs to represent the area
+    id = id_df.mode()[0]
+    factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
     factor_bbox = bbox_zensus @ gcp_factors.loc[technik] / factor_area * data_gcp.loc[id]
     if factor_bbox < 0:
         factor_bbox = 0
@@ -466,7 +467,7 @@ def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame,
         
 
 
-def sort_gcp(buses: pd.DataFrame, gcp: str, amount_total: float, solar_power: float) -> pd.DataFrame:
+def sort_gcp(buses: pd.DataFrame, gcp: str, amount_total: float, solar_power: pd.DataFrame) -> pd.DataFrame:
     """
     Distributes a given technology (e.g., solar, heat pump, e-car) across buses 
     in the network based on their factor values.
@@ -475,7 +476,7 @@ def sort_gcp(buses: pd.DataFrame, gcp: str, amount_total: float, solar_power: fl
         buses (pd.DataFrame): DataFrame containing bus data.
         gcp (str): The technology to be distributed (e.g., "solar", "HP", "E_car").
         amount_total (float): The total number or capacity to be distributed among buses.
-        solar_power (float): The installed solar capacity (in kW) for the postal code area.
+        solar_power (pd.DataFrame): The installed solar capacity (in kW) for the postal code area.
 
     Returns:
         pd.DataFrame: Updated DataFrame with the distributed technology power assigned.
@@ -494,7 +495,11 @@ def sort_gcp(buses: pd.DataFrame, gcp: str, amount_total: float, solar_power: fl
     # Handle case where solar data already exists (from MaStR or similar)
     if gcp == 'solar' and "type_1" in buses.columns:
         mask_type1 = buses["type_1"] == gcp
-        power_col.loc[mask_type1] = solar_power
+
+        # Assign existing solar power based on postal code installed capacity
+        for bus in buses[mask_type1].index:
+            plz = buses.loc[bus, 'plz_code']
+            power_col.loc[bus] = solar_power.at[plz, 'Mean_Solar_Installed_Capacity_[kW]']
 
         # Count already assigned solar units and adjust total amount
         amount = mask_type1.sum()
@@ -529,7 +534,10 @@ def sort_gcp(buses: pd.DataFrame, gcp: str, amount_total: float, solar_power: fl
 
         # Assign gcp power based on type
         if gcp == 'solar':
-            power_col.loc[sampled_buses_index] = solar_power
+            # Assign solar power based on postal code installed capacity
+            for bus in sampled_buses_index:
+                plz = buses.loc[bus, 'plz_code']
+                power_col.loc[bus] = solar_power.at[plz, 'Mean_Solar_Installed_Capacity_[kW]']
         else:
             power_col.loc[sampled_buses_index] += key
 
@@ -568,22 +576,21 @@ def solar_orientation(buses: pd.DataFrame, plz: str, pv_plz: pd.DataFrame) -> pd
             - 'Hauptausrichtung_Anteil' (main orientation)
             - 'HauptausrichtungNeigungswinkel_Anteil' (main tilt angle)
     """
+    # Filter buses with solar installations
+    buses = buses.copy()
+    solar_buses = buses[buses["Power_solar"] != 0].copy()
 
+    # Assign orientation and tilt for each solar bus
+    for bus in solar_buses.index:
+        plz_bus = buses.loc[bus, 'plz_code']
 
-    # Extract orientation and tilt distributions for the specified PLZ
-    orientation_dist = ast.literal_eval(pv_plz.loc[plz, 'Hauptausrichtung_Anteil'])
-    tilt_dist = ast.literal_eval(pv_plz.loc[plz, 'HauptausrichtungNeigungswinkel_Anteil'])
+        # Extract orientation and tilt distributions for the bus's PLZ
+        orientation_dist = ast.literal_eval(pv_plz.loc[plz_bus, 'Hauptausrichtung_Anteil'])
+        tilt_dist = ast.literal_eval(pv_plz.loc[plz_bus, 'HauptausrichtungNeigungswinkel_Anteil'])
 
-    # Filter buses with solar
-    df = buses[buses["Power_solar"] != 0].copy()
-
-    # Randomly assign orientation and tilt based on probability distributions
-    df["Hauptausrichtung_Anteil"] = np.random.choice(list(orientation_dist.keys()), size=len(df), p=list(orientation_dist.values()))
-    df["HauptausrichtungNeigungswinkel_Anteil"] = np.random.choice(list(tilt_dist.keys()), size=len(df), p=list(tilt_dist.values()))
-
-    # Write results back into main DataFrame
-    buses.loc[df.index, 'Hauptausrichtung_Anteil'] = df['Hauptausrichtung_Anteil']
-    buses.loc[df.index, 'HauptausrichtungNeigungswinkel_Anteil'] = df['HauptausrichtungNeigungswinkel_Anteil']
+        # Randomly assign orientation and tilt based on probability distributions
+        buses.at[bus, "Hauptausrichtung_Anteil"] = np.random.choice(list(orientation_dist.keys()), p=list(orientation_dist.values()))
+        buses.at[bus, "HauptausrichtungNeigungswinkel_Anteil"] = np.random.choice(list(tilt_dist.keys()), p=list(tilt_dist.values()))
 
     return buses
 
@@ -604,16 +611,22 @@ def storage(buses: pd.DataFrame, storage_pv: float) -> pd.DataFrame:
         pd.DataFrame: 
             Updated DataFrame with a new column 'storage', indicating assigned storage capacity (in kWh).
     """
-    
-    prob = storage_pv 
+
+    # Initialize 'storage' column
     buses = buses.copy()
     buses['storage'] = 0.0
-
-    # Randomly assign storage systems to a fraction of solar-equipped buses
-    solar_index = buses[buses['Power_solar'] != 0].sample(frac=prob).index
-    # 1 kWp PV capacity corresponds to 1 kWh storage capacity
-    buses.loc[solar_index, 'storage'] = buses.loc[solar_index, 'Power_solar'] * 1.0
-
+    # Assign storage to solar buses based on probability
+    solar_buses = buses[buses['Power_solar'] != 0].index
+    for bus in solar_buses:
+        # Get postal code for the bus
+        plz = buses.at[bus, 'plz_code']
+        # Get storage probability for the postal code
+        storage_pv_bus = storage_pv.at[plz, 'Storage_per_PV']
+        # Randomly decide if storage is assigned
+        if random.random() < storage_pv_bus:
+            # 1 kWp PV capacity corresponds to 1 kWh storage capacity
+            buses.at[bus, 'storage'] = buses.at[bus, 'Power_solar'] * 1.0
+    
     return buses
 
 

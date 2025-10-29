@@ -142,6 +142,12 @@ def extract_lv_subnetwork_to_nearest_transformers(start_buses: pd.DataFrame, pat
         if hasattr(grid, name):
             setattr(new_grid, name, getattr(grid, name))
 
+
+    # drop lines with s_nom > 1
+    if not new_grid.lines.empty:
+        new_grid.lines = new_grid.lines[new_grid.lines["s_nom"] <= 1.0]
+
+        
     return new_grid
 
 

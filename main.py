@@ -135,29 +135,39 @@ Waldmünchen
 '''
 Opfingen
 '''
-# top =  48.00798 # # Upper latitude
-# bottom = 47.99434 # Lower latitude
-# left =  7.70691   # Right longitude
-# right =  7.72483   # Left longitude
+top =  48.00798 # # Upper latitude
+bottom = 47.99434 # Lower latitude
+left =  7.70691   # Right longitude
+right =  7.72483   # Left longitude
 
 '''
 Schallstadt
 '''
-top =  47.967835 # # Upper latitude
-bottom = 47.955593 # Lower latitude
-left =  7.735381   # Right longitude
-right =  7.772647   # Left longitude
+# top =  47.967835 # # Upper latitude
+# bottom = 47.955593 # Lower latitude
+# left =  7.735381   # Right longitude
+# right =  7.772647   # Left longitude
 
 grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)
 
 #%%
-grid.export_to_netcdf("output/grid_Schallstadt_GER_ecar.nc")
+# Anzahl an Solaranlagen im Grid:
+num_solar_gens = grid.generators[grid.generators['carrier'] == 'solar'].shape[0]
+print(f"Anzahl an Solaranlagen im Netz: {num_solar_gens}")
+
+# Anzahl an StorgaeUnits im Grid:
+num_storage_units = grid.storage_units.shape[0]
+print(f"Anzahl an Speichersystemen im Netz: {num_storage_units}")
+
+
+#%%
+grid.export_to_netcdf("output/grid_Schallstadt_test.nc")
 
 #%%
 # buses.to_csv("output/buses_Schallstadt_GER.csv")
 
-# import networkx as nx
-# nx.write_gpickle(area, "output/area_Schallstadt_GER.pkl") 
+import networkx as nx
+nx.write_gpickle(area, "output/area_Schallstadt_test.pkl") 
 
 # import geopandas as gpd
 # features.to_file("output/features_Schallstadt_GER.gpkg", driver="GPKG")
