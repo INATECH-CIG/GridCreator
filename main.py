@@ -142,15 +142,15 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
 # left =  7.70691   # Right longitude
 # right =  7.72483   # Left longitude
 
-# '''
-# Schallstadt
-# '''
-# # top =  47.967835 # # Upper latitude
-# # bottom = 47.955593 # Lower latitude
-# # left =  7.735381   # Right longitude
-# # right =  7.772647   # Left longitude
+'''
+Schallstadt
+'''
+top =  47.967835 # # Upper latitude
+bottom = 47.955593 # Lower latitude
+left =  7.735381   # Right longitude
+right =  7.772647   # Left longitude
 
-# grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[5], buses_df=buses, grid=grid)
+grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[1])#, buses_df=buses, grid=grid)
 
 # #%%
 # # Anzahl an Solaranlagen im Grid:
