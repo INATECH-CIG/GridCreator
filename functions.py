@@ -397,7 +397,7 @@ def permission(buses: pd.DataFrame, pfad: str) -> pd.DataFrame:
         pd.Series: A pandas Series containing the 'Schluessel_Zulbz' ID (registration district key) for each bus.
     """
 
-    data = gpd.read_file(f"{pfad}/input/FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson")
+    data = gpd.read_file(os.path.join(pfad, "input", "FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson"))
 
     # Convert bus coordinates into a GeoDataFrame
     gdf_buses = gpd.GeoDataFrame(buses.copy(), geometry=gpd.points_from_xy(buses["x"], buses["y"]), crs=data.crs)
@@ -683,7 +683,7 @@ def env_weather(bbox: list, path: str, time_discretization: int = 3600, timestep
     datasets = {}
     for var, cod in variables:
         filename = 'GER_' +var + '.nc'
-        ds = xr.open_dataset(os.path.join(path, 'input/weather_2013', filename))
+        ds = xr.open_dataset(os.path.join(path, 'input', 'weather_2013', filename))
         datasets[var] = ds
         print(f"Variable {var} verarbeitet.")
 
