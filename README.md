@@ -19,7 +19,25 @@ The output distribution grid will contain
 tbd
 
 ## Installation
-tbd
+1. Clone the repository and navigate to its directory:
+```bash
+git clone https://github.com/INATECH-CIG/GridCreator.git
+cd assume
+```
+2. Set up an environment
+```bash
+conda create -n GridCreator python=3.12.11
+```
+3. Install required packages
+```bash
+conda activate GridCreator
+pip install -r requirements.txt
+```
+
+## Necessary input data
+for step 1:
+- download input.zip containing weather data, zensus data and ding0 grids from bwsyncandshare cloud
+- 
 
 ## Release Status
-This Repo is in progress.
+This Repo is in work in progress.
