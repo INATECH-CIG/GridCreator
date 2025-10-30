@@ -169,3 +169,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# infeasible optimization log files
+.ilp
+
+# input files (to be downloaded from external sources)
+.zip
+/input
