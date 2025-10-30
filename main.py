@@ -4,13 +4,15 @@ import input_data as data
 import geopandas as gpd
 import pandas as pd
 
+import pypsa
+
 '''
 Main module for the GridCreator tool.
 Handles the overall workflow including data preparation, grid creation, technology assignment, load profile generation.
 '''
 
 #%%
-def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2,3,4,5], technologies=['solar', 'E_car', 'HP'], load_method: int = 0, buses_df = pd.DataFrame()) -> tuple:
+def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2,3,4,5], technologies=['solar', 'E_car', 'HP'], load_method: int = 0, buses_df = pd.DataFrame(), grid = pypsa.Network()) -> tuple:
     '''
     Main function for GridCreator  
     Steps:
@@ -111,63 +113,63 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
 
     return grid, buses_df, bbox, area, features
 
-#%%
+# #%%
 
-# top =  54.48594882134629 # # Upper latitude
-# bottom = 54.47265521486088 # Lower latitude
-# left =  11.044533685584453    # Right longitude
-# right =  11.084893505520695  # Left longitude
-'''
-Waldmünchen
-'''
-# top =  49.374518600877046 # # Upper latitude
-# bottom = 49.36971937206515 # Lower latitude
-# left =  12.697361279468392   # Right longitude
-# right =  12.708888681047798  # Left longitude
-'''
-2 Nodes
-'''
-# top =  49.3727 # # Upper latitude
-# bottom = 49.372485 # Lower latitude
-# left =  12.703688   # Right longitude
-# right =  12.704 # Left longitude
+# # top =  54.48594882134629 # # Upper latitude
+# # bottom = 54.47265521486088 # Lower latitude
+# # left =  11.044533685584453    # Right longitude
+# # right =  11.084893505520695  # Left longitude
+# '''
+# Waldmünchen
+# '''
+# # top =  49.374518600877046 # # Upper latitude
+# # bottom = 49.36971937206515 # Lower latitude
+# # left =  12.697361279468392   # Right longitude
+# # right =  12.708888681047798  # Left longitude
+# '''
+# 2 Nodes
+# '''
+# # top =  49.3727 # # Upper latitude
+# # bottom = 49.372485 # Lower latitude
+# # left =  12.703688   # Right longitude
+# # right =  12.704 # Left longitude
 
-'''
-Opfingen
-'''
-top =  48.00798 # # Upper latitude
-bottom = 47.99434 # Lower latitude
-left =  7.70691   # Right longitude
-right =  7.72483   # Left longitude
+# '''
+# Opfingen
+# '''
+# top =  48.00798 # # Upper latitude
+# bottom = 47.99434 # Lower latitude
+# left =  7.70691   # Right longitude
+# right =  7.72483   # Left longitude
 
-'''
-Schallstadt
-'''
-# top =  47.967835 # # Upper latitude
-# bottom = 47.955593 # Lower latitude
-# left =  7.735381   # Right longitude
-# right =  7.772647   # Left longitude
+# '''
+# Schallstadt
+# '''
+# # top =  47.967835 # # Upper latitude
+# # bottom = 47.955593 # Lower latitude
+# # left =  7.735381   # Right longitude
+# # right =  7.772647   # Left longitude
 
-grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)
+# grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[5], buses_df=buses, grid=grid)
 
-#%%
-# Anzahl an Solaranlagen im Grid:
-num_solar_gens = grid.generators[grid.generators['carrier'] == 'solar'].shape[0]
-print(f"Anzahl an Solaranlagen im Netz: {num_solar_gens}")
+# #%%
+# # Anzahl an Solaranlagen im Grid:
+# num_solar_gens = grid.generators[grid.generators['carrier'] == 'solar'].shape[0]
+# print(f"Anzahl an Solaranlagen im Netz: {num_solar_gens}")
 
-# Anzahl an StorgaeUnits im Grid:
-num_storage_units = grid.storage_units.shape[0]
-print(f"Anzahl an Speichersystemen im Netz: {num_storage_units}")
+# # Anzahl an StorgaeUnits im Grid:
+# num_storage_units = grid.storage_units.shape[0]
+# print(f"Anzahl an Speichersystemen im Netz: {num_storage_units}")
 
 
-#%%
-grid.export_to_netcdf("output/grid_Schallstadt_test.nc")
+# #%%
+# grid.export_to_netcdf("output/grid_Schallstadt_test.nc")
 
-#%%
-# buses.to_csv("output/buses_Schallstadt_GER.csv")
+# #%%
+# # buses.to_csv("output/buses_Schallstadt_GER.csv")
 
-import networkx as nx
-nx.write_gpickle(area, "output/area_Schallstadt_test.pkl") 
+# import networkx as nx
+# nx.write_gpickle(area, "output/area_Schallstadt_test.pkl") 
 
 # import geopandas as gpd
 # features.to_file("output/features_Schallstadt_GER.gpkg", driver="GPKG")
