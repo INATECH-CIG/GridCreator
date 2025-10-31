@@ -45,12 +45,12 @@ def generator_duplikate_zusammenfassen(grid: pypsa.Network) -> pypsa.Network:
 
     if not new_generators.empty:
         # Delete old generators
-        grid.generators.drop(index=grid.generators.index, inplace=True)
+        grid.remove('Generator', grid.generators.index)
 
         # flatten MultiIndex and set index
         new_generators.index = new_generators.index.map(lambda x: '_'.join(str(i) for i in x if i))
         # Add new generators
-        grid._import_components_from_df('Generator', new_generators)
+        grid._import_components_from_df(new_generators, 'Generator')
 
     return grid
 
