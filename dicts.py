@@ -13,6 +13,9 @@ solar_dict={
     'Nord': 180
 }
 
+generator_agg_dict = {'p_nom' : 'sum',
+                      'efficiency' : 'mean',}
+
 agg_dict={
     'Zensus_Holz_Holzpellets': 'sum',
     'Zensus_Kohle': 'sum',

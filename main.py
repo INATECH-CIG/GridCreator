@@ -1,5 +1,7 @@
+#%%
 import main_functions as mf
 import input_data as data
+import ding0_grid_generator
 
 import geopandas as gpd
 import pandas as pd
@@ -110,7 +112,7 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
     if 5 in steps:
         # Prepare grid for pysa.optimize()
         grid = mf.pypsa_preparation(grid)
-
+    
     return grid, buses_df, bbox, area, features
 
 # #%%
@@ -141,14 +143,22 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
 # bottom = 47.99434 # Lower latitude
 # left =  7.70691   # Right longitude
 # right =  7.72483   # Left longitude
+# scenario = 'Opfingen'
 
 # '''
 # Schallstadt
 # '''
-top =  47.967835 # # Upper latitude
-bottom = 47.955593 # Lower latitude
-left =  7.735381   # Right longitude
-right =  7.772647   # Left longitude
+top =  47.96 # # Upper latitude
+bottom = 47.95 # Lower latitude
+left =  7.74   # left longitude
+right =  7.75   # right longitude
+scenario = 'Schallstadt_small'
+
+# top =  47.967835 # # Upper latitude
+# bottom = 47.955593 # Lower latitude
+# left =  7.735381   # Right longitude
+# right =  7.772647   # Left longitude
+# scenario = 'Schallstadt_large'
 
 grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)#, steps=[1])#, buses_df=buses, grid=grid)
 
@@ -252,3 +262,14 @@ grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)#, step
 # #
 # # grid_1.optimize()
 # %%
+
+if __name__ == "__main__":
+    grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[1])
+
+    ding0_grid_generator.save_output_data(grid,
+                                           buses,
+                                           area,
+                                           features,
+                                           scenario='Schallstadt_small',
+                                           steps=[1],
+                                           path='output')

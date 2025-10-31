@@ -11,9 +11,9 @@ def save_data():
     if necessary. Returns the path to the local data directory.
     """
 
-    SCRIPT_DIR = Path(__file__).parent
-    DATA_DIR = SCRIPT_DIR / "my_local_data_GridCreator"
-    ZIP_FILE = SCRIPT_DIR / "input.zip"
+    #DATA_DIR = Path.home() / "my_local_data_GridCreator"  # e.g. C:/Users/.../my_local_data
+    DATA_DIR = Path(__file__).parent / "input"
+    ZIP_FILE = Path(__file__).parent / "input.zip"
 
     # Ensure the target folder exists
     DATA_DIR.mkdir(exist_ok=True, parents=True)

@@ -170,6 +170,12 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Local input data for GridCreator
-my_local_data_GridCreator/
-input.zip
+# infeasible optimization log files
+.ilp
+
+# input files (to be downloaded from external sources)
+/input
+*.zip
+
+# results
+/output

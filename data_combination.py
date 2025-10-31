@@ -4,6 +4,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 import networkx as nx
+from dicts import generator_agg_dict
 
 # import for type hints
 import pypsa
@@ -25,27 +26,27 @@ def generator_duplikate_zusammenfassen(grid: pypsa.Network) -> pypsa.Network:
     """
     gens = grid.generators
 
-    # Group by bus AND type
-    grouped = gens.groupby(['bus', 'type'])
+    if 'carrier' in gens.columns and 'type' in gens.columns:
+        # Group by bus, type AND carrier
+        new_generators = gens.groupby(['bus', 'type', 'carrier']).generators_agg_dict()
+    elif 'carrier' not in gens.columns and 'type' in gens.columns:
+        # Group by bus AND type
+        new_generators = gens.groupby(['bus', 'type']).generators_agg_dict()
+    elif 'type' not in gens.columns and 'carrier' in gens.columns:
+        # Group by bus AND carrier
+        new_generators = gens.groupby(['bus', 'carrier']).generators_agg_dict()
+    else:
+        # raise warning and return original grid
+        new_generators = pd.DataFrame()
+        print("Warning: Neither 'type' nor 'carrier' columns found in generators. No consolidation performed.")
 
-    new_generators = []
+    if not new_generators.empty:
+        # Delete old generators
+        grid.generators.drop(index=grid.generators.index, inplace=True)
 
-    for (bus, type), group in grouped:
-        p_nom_sum = group['p_nom'].sum()
-        new_generators.append({
-            'name': f"{bus}_{type}",
-            'bus': bus,
-            'type': type,
-            'carrier': group['carrier'].iloc[0], # Take the carrier from the first entry
-            'p_nom': p_nom_sum
-        })
-
-    # Delete old generators
-    grid.generators.drop(index=grid.generators.index, inplace=True)
-
-    # Add new generators
-    for gen in new_generators:
-        grid.add("Generator", **gen)
+        # Add new generators
+        for gen in new_generators:
+            grid.add("Generator", **gen)
 
     return grid
 
