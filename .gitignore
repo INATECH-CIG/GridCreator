@@ -174,5 +174,8 @@ cython_debug/
 .ilp
 
 # input files (to be downloaded from external sources)
-.zip
 /input
+*.zip
+
+# results
+/output

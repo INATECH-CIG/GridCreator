@@ -349,7 +349,7 @@ def load_zensus(buses: pd.DataFrame, folder: str) -> pd.DataFrame:
 
 
 
-    Zensus2022_Energietraeger_100m = (pl.scan_csv(folder + "/Zensus2022_Energietraeger_100m-Gitter_utf8.csv", separator=";")
+    Zensus2022_Energietraeger_100m = (pl.scan_csv(folder + "/Zensus2022_Energietraeger_100m-Gitter.csv", separator=";")
                                                     .filter(pl.col("GITTER_ID_100m").is_in(columns))
                                                     .select("GITTER_ID_100m",
                                                             "Gas",

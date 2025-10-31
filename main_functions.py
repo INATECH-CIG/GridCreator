@@ -34,7 +34,7 @@ def ding0_grid(bbox: list[float], path: str) -> tuple[pypsa.Network, list[float]
         tuple: A tuple containing the grid object and the bounding box.
     """
     # Directory where the grids are stored
-    grids_dir = os.path.join(path, "input", "grids")
+    grids_dir = os.path.join(path, "grids")
     # Load the grid
     grid = ding0.load_grid(bbox, grids_dir)
 
