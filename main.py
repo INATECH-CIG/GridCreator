@@ -2,6 +2,7 @@
 import main_functions as mf
 import input_data as data
 import ding0_grid_generator
+import os
 
 import geopandas as gpd
 import pandas as pd
@@ -56,7 +57,8 @@ def GridCreator(top: float,
     '''
 
     # STEP 0
-    path = data.save_data()
+    data.save_data()
+    input_path = os.path.join(os.getcwd(), 'input')
 
     # Define bounding box
     bbox = [left, bottom, right, top]
@@ -68,7 +70,7 @@ def GridCreator(top: float,
     # STEP 1
     if 1 in steps:        
         #Grid creation
-        grid, bbox = mf.ding0_grid(bbox, path)
+        grid, bbox = mf.ding0_grid(bbox, input_path)
         grid.name = scenario
         # Check if pypsa network is empty
         if grid.buses.empty:
@@ -86,7 +88,7 @@ def GridCreator(top: float,
         buffer = 0.0002  # corresponds to approximately 20 m
         buses_df, area, features = mf.osm_data(grid, bbox, buffer)
         # Federal state data
-        buses_df = mf.data_assignment(buses_df, path)
+        buses_df = mf.data_assignment(buses_df, input_path)
 
         # Return if Step 2 is the last selected step
         if steps[-1] == 2:
@@ -98,10 +100,10 @@ def GridCreator(top: float,
         # Define technologies
         gcp = technologies # gcp = generation and consumption plants
         # Assign technologies
-        buses_df, factor_bbox = mf.gcp_assignment(buses_df, gcp, path)
+        buses_df, factor_bbox = mf.gcp_assignment(buses_df, gcp, input_path)
         buses_df = mf.appartments_assignment(buses_df)
         # Add technology data to buses_df
-        buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, path)
+        buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, input_path)
 
         # Return if Step 3 is the last selected step
         if steps[-1] == 3:
@@ -111,7 +113,7 @@ def GridCreator(top: float,
     # STEP 4
     if 4 in steps:
         # Add time series
-        grid = mf.loads_assignment(grid, buses_df, bbox, path, load_method)
+        grid = mf.loads_assignment(grid, buses_df, bbox, input_path, load_method)
 
         # Return if Step 4 is the last selected step
         if steps[-1] == 4:
@@ -169,7 +171,7 @@ scenario = 'Schallstadt_small'
 # right =  7.772647   # Left longitude
 # scenario = 'Schallstadt_large'
 
-grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, scenario=scenario)
+# grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, scenario=scenario)
 
 # #%%
 # # Anzahl an Solaranlagen im Grid:
@@ -273,10 +275,11 @@ grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, scenar
 # %%
 
 if __name__ == "__main__":
-    grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[1])
+    grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[1], scenario=scenario)
 
     ding0_grid_generator.save_output_data(grid,
                                            buses,
+                                           bbox,
                                            area,
                                            features,
                                            scenario='Schallstadt_small',

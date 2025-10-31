@@ -25,5 +25,3 @@ def save_data():
         print(f"Data extracted to {DATA_DIR}")
     else:
         print(f"Data already present in {DATA_DIR}")
-    
-    return DATA_DIR
