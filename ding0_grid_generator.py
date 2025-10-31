@@ -220,3 +220,32 @@ def load_grid(bbox: tuple, grids_dir: str) -> pypsa.Network:
         print("No buses found within the BBOX.")
         grid = pypsa.Network()  # Return empty network if no buses found
     return grid
+
+def save_output_data(grid,
+                     buses_df,
+                     area,
+                     features,
+                     scenario: str,
+                     steps: list,
+                     path='output',
+                     ):
+
+    output_dir = os.path.join(path, scenario, f'step_{steps[-1]}')
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Save grid data
+    grid.export_to_netcdf(os.path.join(output_dir, "grid.nc"))
+    
+    # Save buses data
+    if not buses_df.empty:
+        buses_df.to_csv(os.path.join(output_dir, "buses.csv"))
+    
+    # Save area data
+    if not area.empty:
+        area.to_file(os.path.join(output_dir, "area.gpkg"), driver="GPKG")
+    
+    # Save features data
+    if not features.empty:
+        features.to_file(os.path.join(output_dir, "features.gpkg"), driver="GPKG")
+
+    print(f"Output data saved to {output_dir}")
