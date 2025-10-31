@@ -14,7 +14,16 @@ Handles the overall workflow including data preparation, grid creation, technolo
 '''
 
 #%%
-def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2,3,4,5], technologies=['solar', 'E_car', 'HP'], load_method: int = 0, buses_df = pd.DataFrame(), grid = pypsa.Network()) -> tuple:
+def GridCreator(top: float,
+                bottom: float,
+                left: float,
+                right: float,
+                scenario: str,
+                steps=[1,2,3,4,5],
+                technologies=['solar', 'E_car', 'HP'],
+                load_method: int = 0,
+                buses_df = pd.DataFrame(),
+                grid = pypsa.Network()) -> tuple:
     '''
     Main function for GridCreator  
     Steps:
@@ -60,7 +69,7 @@ def GridCreator(top: float, bottom: float, left: float, right: float, steps=[1,2
     if 1 in steps:        
         #Grid creation
         grid, bbox = mf.ding0_grid(bbox, path)
-
+        grid.name = scenario
         # Check if pypsa network is empty
         if grid.buses.empty:
             print("Das erzeugte Netz ist leer. Bitte überprüfen Sie die Eingabekoordinaten.")
@@ -160,7 +169,7 @@ scenario = 'Schallstadt_small'
 # right =  7.772647   # Left longitude
 # scenario = 'Schallstadt_large'
 
-grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)#, steps=[1])#, buses_df=buses, grid=grid)
+grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, scenario=scenario)
 
 # #%%
 # # Anzahl an Solaranlagen im Grid:

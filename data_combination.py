@@ -25,16 +25,19 @@ def generator_duplikate_zusammenfassen(grid: pypsa.Network) -> pypsa.Network:
         pypsa.Network: The updated network with consolidated generators.
     """
     gens = grid.generators
+    # Filter aggregation dictionary to only include existing columns
+    agg_dict_filtered = {k: v for k, v in generator_agg_dict.items() if k in gens.columns}
 
     if 'carrier' in gens.columns and 'type' in gens.columns:
         # Group by bus, type AND carrier
-        new_generators = gens.groupby(['bus', 'type', 'carrier']).generators_agg_dict()
+        new_generators = gens.groupby(['bus', 'type', 'carrier']).agg(agg_dict_filtered)
+        
     elif 'carrier' not in gens.columns and 'type' in gens.columns:
         # Group by bus AND type
-        new_generators = gens.groupby(['bus', 'type']).generators_agg_dict()
+        new_generators = gens.groupby(['bus', 'type']).agg(agg_dict_filtered)
     elif 'type' not in gens.columns and 'carrier' in gens.columns:
         # Group by bus AND carrier
-        new_generators = gens.groupby(['bus', 'carrier']).generators_agg_dict()
+        new_generators = gens.groupby(['bus', 'carrier']).agg(agg_dict_filtered)
     else:
         # raise warning and return original grid
         new_generators = pd.DataFrame()
@@ -42,11 +45,12 @@ def generator_duplikate_zusammenfassen(grid: pypsa.Network) -> pypsa.Network:
 
     if not new_generators.empty:
         # Delete old generators
-        grid.generators.drop(index=grid.generators.index, inplace=True)
+        grid.remove('Generator', grid.generators.index)
 
+        # flatten MultiIndex and set index
+        new_generators.index = new_generators.index.map(lambda x: '_'.join(str(i) for i in x if i))
         # Add new generators
-        for gen in new_generators:
-            grid.add("Generator", **gen)
+        grid._import_components_from_df(new_generators, 'Generator')
 
     return grid
 
