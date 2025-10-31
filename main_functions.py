@@ -513,6 +513,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     
     if method == 0:
         # Generate for each household type 10 different profiles
+        print("Generating load profiles for households...")
         power_dict = {}
         occupants_dict = {}
 
@@ -637,7 +638,8 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             while remaining_residents > 0:
                 persons = min(remaining_residents, 5)  # Nimm maximal 5 Personen für den Haushalt
                 buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
-
+    print("Loads and EVs assigned to the grid.")
+    
     # Combine all generated profiles into PyPSA objects
     grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
     # grid.storage_units_t.state_of_charge_set = pd.concat([grid.storage_units_t.state_of_charge_set, pd.DataFrame(e_car_soc)], axis=1)
