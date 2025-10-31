@@ -103,7 +103,7 @@ def data_assignment(buses: pd.DataFrame, path: str) -> pd.DataFrame:
     buses = func.load_zensus(buses, zensus_dir)
 
     # Restore old index
-    buses.set_index("Bus", inplace=True)
+    buses.set_index("name", inplace=True)
 
     return buses
 

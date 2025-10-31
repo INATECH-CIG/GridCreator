@@ -160,7 +160,7 @@ scenario = 'Schallstadt_small'
 # right =  7.772647   # Left longitude
 # scenario = 'Schallstadt_large'
 
-# grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[1])#, buses_df=buses, grid=grid)
+grid, buses, bbox, area, features = GridCreator(top, bottom, left, right)#, steps=[1])#, buses_df=buses, grid=grid)
 
 # #%%
 # # Anzahl an Solaranlagen im Grid:
