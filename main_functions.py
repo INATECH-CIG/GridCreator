@@ -66,14 +66,22 @@ def osm_data(network: pypsa.Network, bbox_new: list[float], buffer: float) -> tu
     left, bottom, right, top = bbox_new
     bbox_osm = (left - buffer, bottom - buffer, right + buffer, top + buffer)
     # osm Data abrufen
-    Area, Area_features = func.get_osm_data(bbox_osm)
+    area_graph, area_features = func.get_osm_data(bbox_osm)
+
+    # transform area_graph nodes to GeoDataFrame
+    node_records = []
+    for n, data in area_graph.nodes(data=True):
+        if 'x' in data and 'y' in data:
+            node_records.append({**data, 'name' : n, 'geometry' : gpd.points_from_xy([data['x']], [data['y']])[0]})
+    area = gpd.GeoDataFrame(node_records, geometry='geometry', crs="EPSG:4326")
+    
     # Reset index for feature data
-    Area_features_df = Area_features.reset_index()
+    area_features_df = area_features.reset_index()
 
     # Combine network and OSM data
-    buses_df = dc.data_combination(network, Area_features_df)
+    buses_df = dc.data_combination(network, area_features_df)
 
-    return buses_df, Area, Area_features
+    return buses_df, area, area_features
 
 
 def data_assignment(buses: pd.DataFrame, input_path: str) -> pd.DataFrame:
@@ -109,7 +117,7 @@ def data_assignment(buses: pd.DataFrame, input_path: str) -> pd.DataFrame:
 
 
 
-def gcp_assignment(buses: pd.DataFrame, gcp_list: list[str], path: str) -> tuple[pd.DataFrame, list[float]]:
+def gcp_assignment(buses: pd.DataFrame, gcp_list: list[str], input_path: str) -> tuple[pd.DataFrame, list[float]]:
     """
     Assigns different gcp (generation and consumption plants) to buses in the network based on zensus and population data.
 
@@ -125,11 +133,11 @@ def gcp_assignment(buses: pd.DataFrame, gcp_list: list[str], path: str) -> tuple
     """
 
     # Load input CSVs
-    file_Faktoren = f"{path}/input/Faktoren.csv"
-    file_solar = f"{path}/input/Bev_data_solar.csv"
-    file_ecar = f"{path}/input/Bev_data_ecar.csv"
-    file_hp = f"{path}/input/Bev_data_hp.csv"
-    
+    file_Faktoren = os.path.join(input_path, "Faktoren.csv")
+    file_solar = os.path.join(input_path, "Bev_data_solar.csv")
+    file_ecar = os.path.join(input_path, "Bev_data_ecar.csv")
+    file_hp = os.path.join(input_path, "Bev_data_hp.csv")
+
     gcp_factors = pd.read_csv(file_Faktoren)
     gcp_factors = gcp_factors.set_index("Technik")
 
@@ -178,7 +186,7 @@ def gcp_assignment(buses: pd.DataFrame, gcp_list: list[str], path: str) -> tuple
 
     # E-car assignment
     if 'E_car' in gcp_list:
-        buses_permission = func.permission(buses, path)
+        buses_permission = func.permission(buses, input_path)
         technik = 'E_car'
         i = gcp_list.index(technik)
         buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, gcp_factors, data_ecar, bbox_zensus, 'E_car', buses_permission)
@@ -403,22 +411,22 @@ def appartments_assignment(buses: pd.DataFrame) -> pd.DataFrame:
     return buses
 
 
-def gcp_fill(buses: pd.DataFrame, gcp: List[str], p_total: List[float], pfad: str) -> pd.DataFrame:
+def gcp_fill(buses: pd.DataFrame, gcp: List[str], p_total: List[float], input_path: str) -> pd.DataFrame:
     """
-    Fills the grid object with gcp based on the given proportions.
+    Fills the buses_df with gcp (generation and consumption plants) based on the given proportions.
 
     Args:
         buses (pd.DataFrame): DataFrame containing the bus data (grid nodes).
         gcp (list): List of gcps to be assigned.
         p_total (list): List of proportions for each gcps.
-        path (str): Path to the input data.
+        input_path (str): Path to the input data.
         
     Returns:
         pd.DataFrame: Updated DataFrame with the assigned gcp.
     """
 
     # Load PV and storage data per postal code
-    pv_plz = pd.read_csv(f"{pfad}/input/mastr_values_per_plz.csv", sep=",", dtype={"PLZ": str}).set_index("PLZ")
+    pv_plz = pd.read_csv(os.path.join(input_path, "mastr_values_per_plz.csv"), sep=",", dtype={"PLZ": str}).set_index("PLZ")
     buses = buses.copy()
     buses["plz_code"] = buses["plz_code"].astype(str)
 
@@ -445,7 +453,7 @@ def gcp_fill(buses: pd.DataFrame, gcp: List[str], p_total: List[float], pfad: st
 
 
 
-def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], pfad: str, method: int, env=None):
+def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], input_path: str, method: int, env=None):
     """
     Assigns loads to the grid based on the bus data and environmental conditions.
     
@@ -463,7 +471,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
 
     # Create or reuse environmental object
     if env is None:
-        environment = func.env_weather(bbox, pfad)
+        environment = func.env_weather(bbox, input_path)
     else:
         environment = env
     
