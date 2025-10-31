@@ -76,7 +76,7 @@ def osm_data(network: pypsa.Network, bbox_new: list[float], buffer: float) -> tu
     return buses_df, Area, Area_features
 
 
-def data_assignment(buses: pd.DataFrame, path: str) -> pd.DataFrame:
+def data_assignment(buses: pd.DataFrame, input_path: str) -> pd.DataFrame:
     """
     Assigns federal state (Bundesland) and census data to the buses in the network.
 
@@ -88,8 +88,8 @@ def data_assignment(buses: pd.DataFrame, path: str) -> pd.DataFrame:
     Returns:
         buses: Updated DataFrame with assigned federal state and census data.
     """
-    zensus_dir = f"{path}/input/zensus_daten"
-    gpd_federal_state = gpd.read_file(f"{path}/input/georef-germany-postleitzahl.geojson")
+    zensus_dir = os.path.join(input_path, "zensus_daten")
+    gpd_federal_state = gpd.read_file(os.path.join(input_path, "georef-germany-postleitzahl.geojson"))
     
     # Assign federal state to each bus
     buses = func.federal_state(buses, gpd_federal_state)

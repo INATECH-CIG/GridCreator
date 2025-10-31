@@ -179,3 +179,6 @@ cython_debug/
 
 # results
 /output
+
+# cached files
+/cache
