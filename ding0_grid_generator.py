@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import networkx as nx
+import geopandas as gpd
 
 '''
 Module for extracting low-voltage subnetworks from a PyPSA network based on proximity to transformers.
@@ -223,6 +225,7 @@ def load_grid(bbox: tuple, grids_dir: str) -> pypsa.Network:
 
 def save_output_data(grid,
                      buses_df,
+                     bbox,
                      area,
                      features,
                      scenario: str,
@@ -234,15 +237,35 @@ def save_output_data(grid,
     os.makedirs(output_dir, exist_ok=True)
 
     # Save grid data
-    grid.export_to_netcdf(os.path.join(output_dir, "grid.nc"))
+    # Prevent overwriting an existent grid with an empty one (might be empty if step 1 is not selected)
+    if not grid.buses.empty:
+        grid.export_to_netcdf(os.path.join(output_dir, "grid.nc"))
+    
+    # safe adjusted bbox
+    pd.DataFrame([bbox],
+                 columns=["min_x", "min_y", "max_x", "max_y"]).to_csv(
+                     os.path.join(output_dir, "bbox.csv"),
+                     index=False,
+                     )
     
     # Save buses data
     if not buses_df.empty:
         buses_df.to_csv(os.path.join(output_dir, "buses.csv"))
     
     # Save area data
-    if not area.empty:
-        area.to_file(os.path.join(output_dir, "area.gpkg"), driver="GPKG")
+    # step 1 returns gpd.GeoDataFrame, step 2 returns nx.DiGraph
+    # quickfix: check type
+    if isinstance(area, gpd.GeoDataFrame):
+        if not area.empty:
+            area.to_file(os.path.join(output_dir, "area.gpkg"), driver="GPKG")
+    elif isinstance(area, nx.DiGraph):
+        if area.number_of_nodes() > 0:
+            # means area is not empty
+            #TODO Matthias
+            # saving to which data format?
+            # write_gpickle does not exist!
+            # nx.write_gpickle(area, os.path.join(output_dir, "area.pkl"))
+            print("Area saving not implemented yet.")
     
     # Save features data
     if not features.empty:
