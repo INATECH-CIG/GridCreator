@@ -13,3 +13,4 @@ tqdm
 matplotlib
 shapely
 pyarrow
+cartopy

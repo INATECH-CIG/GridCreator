@@ -2,6 +2,7 @@
 import main_functions as mf
 import input_data as data
 import ding0_grid_generator
+import os
 
 import geopandas as gpd
 import pandas as pd
@@ -56,7 +57,9 @@ def GridCreator(top: float,
     '''
 
     # STEP 0
-    path = data.save_data()
+    data.save_data()
+    input_path = os.path.join(os.getcwd(), 'input')
+    output_path = os.path.join(os.getcwd(), 'output', scenario)
 
     # Define bounding box
     bbox = [left, bottom, right, top]
@@ -68,7 +71,7 @@ def GridCreator(top: float,
     # STEP 1
     if 1 in steps:        
         #Grid creation
-        grid, bbox = mf.ding0_grid(bbox, path)
+        grid, bbox = mf.ding0_grid(bbox, input_path)
         grid.name = scenario
         # Check if pypsa network is empty
         if grid.buses.empty:
@@ -84,24 +87,34 @@ def GridCreator(top: float,
         # Load data
         # OSM data
         buffer = 0.0002  # corresponds to approximately 20 m
+        if 1 not in steps:
+            # step 1 might have been executed before, so we need to get the adjusted bbox
+            # bbox = [left, bottom, right, top]
+            bbox_str = list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))
+            bbox = [float(i) for i in bbox_str]
+            # grid might also exist already
+            grid = pypsa.Network(os.path.join(output_path, 'step_1', 'grid.nc'))
+
         buses_df, area, features = mf.osm_data(grid, bbox, buffer)
         # Federal state data
-        buses_df = mf.data_assignment(buses_df, path)
+        buses_df = mf.data_assignment(buses_df, input_path)
 
         # Return if Step 2 is the last selected step
-        if steps[-1] == 2:
+        if steps[-1] == 2:    
             return grid, buses_df, bbox, area, features
-        
-    
+
     # STEP 3
     if 3 in steps:
+        # step 2 might have been executed before, so we need to get the existing buses_df
+        if 2 not in steps:
+            buses_df = pd.read_csv(os.path.join(output_path, 'step_2', 'buses.csv'), index_col=0)
         # Define technologies
         gcp = technologies # gcp = generation and consumption plants
         # Assign technologies
-        buses_df, factor_bbox = mf.gcp_assignment(buses_df, gcp, path)
+        buses_df, factor_bbox = mf.gcp_assignment(buses_df, gcp, input_path)
         buses_df = mf.appartments_assignment(buses_df)
         # Add technology data to buses_df
-        buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, path)
+        buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, input_path)
 
         # Return if Step 3 is the last selected step
         if steps[-1] == 3:
@@ -110,8 +123,15 @@ def GridCreator(top: float,
     
     # STEP 4
     if 4 in steps:
+        # grid might exist already, so we need to load it
+        if 1 not in steps:
+            grid = pypsa.Network(os.path.join(output_path, 'step_1', 'grid.nc'))
+            bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
+        if not 3 in steps:
+            buses_df = pd.read_csv(os.path.join(output_path, 'step_3', 'buses.csv'), index_col=0)
+        
         # Add time series
-        grid = mf.loads_assignment(grid, buses_df, bbox, path, load_method)
+        grid = mf.loads_assignment(grid, buses_df, bbox, input_path, load_method)
 
         # Return if Step 4 is the last selected step
         if steps[-1] == 4:
@@ -119,57 +139,45 @@ def GridCreator(top: float,
 
     # STEP 5
     if 5 in steps:
+        # grid might exist already, so we need to load it
+        if 4 not in steps:
+            grid = pypsa.Network(os.path.join(output_path, 'step_4', 'grid.nc'))
+            
         # Prepare grid for pysa.optimize()
         grid = mf.pypsa_preparation(grid)
     
     return grid, buses_df, bbox, area, features
 
 # #%%
+examples = {
+    "Schallstadt_small": {"top":  47.96, # # Upper latitude
+                            "bottom": 47.95, # Lower latitude
+                            "left":  7.74,   # left longitude
+                            "right":  7.75   # right longitude
+    },
+    "Schallstadt_large": {"top":  47.967835, # # Upper latitude
+                            "bottom": 47.955593, # Lower latitude
+                            "left":  7.735381,   # Right longitude
+                            "right":  7.772647   # Left longitude
+    },
+    "Opfingen": {"top":  48.00798, # # Upper latitude
+                            "bottom": 47.99434, # Lower latitude
+                            "left":  7.70691,   # Right longitude
+                            "right":  7.72483   # Left longitude
+    },
+    "Waldmünchen": {"top":  49.374518600877046, # # Upper latitude
+                            "bottom": 49.36971937206515, # Lower latitude
+                            "left":  12.697361279468392,   # Right longitude
+                            "right":  12.708888681047798  # Left longitude
+    },
+    "2 Nodes": {"top":  49.3727, # # Upper latitude
+                            "bottom": 49.372485, # Lower latitude
+                            "left":  12.703688,   # Right longitude
+                            "right":  12.704  # Left longitude
+    }
+}
 
-# # top =  54.48594882134629 # # Upper latitude
-# # bottom = 54.47265521486088 # Lower latitude
-# # left =  11.044533685584453    # Right longitude
-# # right =  11.084893505520695  # Left longitude
-# '''
-# Waldmünchen
-# '''
-# # top =  49.374518600877046 # # Upper latitude
-# # bottom = 49.36971937206515 # Lower latitude
-# # left =  12.697361279468392   # Right longitude
-# # right =  12.708888681047798  # Left longitude
-# '''
-# 2 Nodes
-# '''
-# # top =  49.3727 # # Upper latitude
-# # bottom = 49.372485 # Lower latitude
-# # left =  12.703688   # Right longitude
-# # right =  12.704 # Left longitude
-
-# '''
-# Opfingen
-# '''
-# top =  48.00798 # # Upper latitude
-# bottom = 47.99434 # Lower latitude
-# left =  7.70691   # Right longitude
-# right =  7.72483   # Left longitude
-# scenario = 'Opfingen'
-
-# '''
-# Schallstadt
-# '''
-top =  47.96 # # Upper latitude
-bottom = 47.95 # Lower latitude
-left =  7.74   # left longitude
-right =  7.75   # right longitude
-scenario = 'Schallstadt_small'
-
-# top =  47.967835 # # Upper latitude
-# bottom = 47.955593 # Lower latitude
-# left =  7.735381   # Right longitude
-# right =  7.772647   # Left longitude
-# scenario = 'Schallstadt_large'
-
-grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, scenario=scenario)
+# grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, scenario=scenario)
 
 # #%%
 # # Anzahl an Solaranlagen im Grid:
@@ -271,14 +279,39 @@ grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, scenar
 # #
 # # grid_1.optimize()
 # %%
+scenario = "Schallstadt_small"
+steps = [1,2,3,4,5]
 
 if __name__ == "__main__":
-    grid, buses, bbox, area, features = GridCreator(top, bottom, left, right, steps=[1])
+    
+    top = examples[scenario]["top"]
+    bottom = examples[scenario]["bottom"]
+    left = examples[scenario]["left"]
+    right = examples[scenario]["right"]
+
+    grid, buses, bbox, area, features = GridCreator(top,
+                                                    bottom,
+                                                    left,
+                                                    right,
+                                                    steps=steps,
+                                                    scenario=scenario,
+                                                    )
 
     ding0_grid_generator.save_output_data(grid,
                                            buses,
+                                           bbox,
                                            area,
                                            features,
-                                           scenario='Schallstadt_small',
-                                           steps=[1],
+                                           scenario=scenario,
+                                           steps=steps,
                                            path='output')
+#%%
+import importlib
+import basic_plotting
+from basic_plotting import plot_grid    
+importlib.reload(basic_plotting)
+if __name__ == "__main__":
+    grid = pypsa.Network(os.path.join('output', 'Schallstadt_small', 'step_5', 'grid.nc'))
+    area = gpd.read_file(os.path.join('output', 'Schallstadt_small', 'step_2', 'area.gpkg'))
+    features = gpd.read_file(os.path.join('output', 'Schallstadt_small', 'step_2', 'features.gpkg'))
+    plot_grid(grid, area, features)

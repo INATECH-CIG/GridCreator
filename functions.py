@@ -385,7 +385,7 @@ def load_zensus(buses: pd.DataFrame, folder: str) -> pd.DataFrame:
 
 
 
-def permission(buses: pd.DataFrame, pfad: str) -> pd.DataFrame:
+def permission(buses: pd.DataFrame, input_path: str) -> pd.DataFrame:
     """
     Assigns each bus in the network its corresponding 5 km grid ID based on registration district data.
     
@@ -397,7 +397,7 @@ def permission(buses: pd.DataFrame, pfad: str) -> pd.DataFrame:
         pd.Series: A pandas Series containing the 'Schluessel_Zulbz' ID (registration district key) for each bus.
     """
 
-    data = gpd.read_file(os.path.join(pfad, "input", "FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson"))
+    data = gpd.read_file(os.path.join(input_path, "FZ Pkw mit Elektroantrieb Zulassungsbezirk_-8414538009745447927.geojson"))
 
     # Convert bus coordinates into a GeoDataFrame
     gdf_buses = gpd.GeoDataFrame(buses.copy(), geometry=gpd.points_from_xy(buses["x"], buses["y"]), crs=data.crs)
@@ -448,7 +448,7 @@ def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame,
 
     # Calculate factors for each bus
     for j, zensus in buses.iterrows():
-        id = id_df.loc[j]
+        id = str(id_df.loc[j])
         factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
         factor_bus = zensus @ gcp_factors.loc[technik]
         if factor_bus < 0:
@@ -457,7 +457,7 @@ def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame,
 
     # Compute factor for the bounding box
     # Using the mode of the IDs to represent the area
-    id = id_df.mode()[0]
+    id = str(id_df.mode()[0])
     factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
     factor_bbox = bbox_zensus @ gcp_factors.loc[technik] / factor_area * data_gcp.loc[id]
     if factor_bbox < 0:
@@ -652,7 +652,7 @@ def relative_humidity(t: float, td: float) -> float:
     return rh
 
 
-def env_weather(bbox: list, path: str, time_discretization: int = 3600, timesteps_horizon: int = 8760, timesteps_used_horizon: int = 8760, timesteps_total: int = 8760) -> Environment: #, year):
+def env_weather(bbox: list, input_path: str, time_discretization: int = 3600, timesteps_horizon: int = 8760, timesteps_used_horizon: int = 8760, timesteps_total: int = 8760) -> Environment: #, year):
     """
     Loads ERA5 weather data for a given bounding box and computes relevant environmental parameters.
     
@@ -683,7 +683,7 @@ def env_weather(bbox: list, path: str, time_discretization: int = 3600, timestep
     datasets = {}
     for var, cod in variables:
         filename = 'GER_' +var + '.nc'
-        ds = xr.open_dataset(os.path.join(path, 'input', 'weather_2013', filename))
+        ds = xr.open_dataset(os.path.join(input_path, 'weather_2013', filename))
         datasets[var] = ds
         print(f"Variable {var} verarbeitet.")
 
