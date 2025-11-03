@@ -14,3 +14,4 @@ matplotlib
 shapely
 pyarrow
 cartopy
+cdsapi
