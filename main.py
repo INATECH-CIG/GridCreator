@@ -279,7 +279,7 @@ examples = {
 # #
 # # grid_1.optimize()
 # %%
-scenario = "Schallstadt_small"
+scenario = "Opfingen"
 steps = [1,2,3,4,5]
 
 if __name__ == "__main__":
@@ -310,14 +310,14 @@ import importlib
 import basic_plotting  
 importlib.reload(basic_plotting)
 if __name__ == "__main__":
-    grid = pypsa.Network(os.path.join('output', 'Schallstadt_small', 'step_5', 'grid.nc'))
-    area = gpd.read_file(os.path.join('output', 'Schallstadt_small', 'step_5', 'area.gpkg'))
-    features = gpd.read_file(os.path.join('output', 'Schallstadt_small', 'step_5', 'features.gpkg'))
-    buses = pd.read_csv(os.path.join('output', 'Schallstadt_small', 'step_5', 'buses.csv'), index_col=0)
-    basic_plotting.plot_step1(grid, area, features)
-    basic_plotting.plot_step2(grid, area, features)
-
+    grid = pypsa.Network(os.path.join('output', 'Opfingen', 'step_5', 'grid.nc'))
+    area = gpd.read_file(os.path.join('output', 'Opfingen', 'step_5', 'area.gpkg'))
+    features = gpd.read_file(os.path.join('output', 'Opfingen', 'step_5', 'features.gpkg'))
+    buses = pd.read_csv(os.path.join('output', 'Opfingen', 'step_5', 'buses.csv'), index_col=0)
     datei = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Energietraeger_100m-Gitter.csv')
+
+    basic_plotting.plot_step1(grid, area, features)
+    basic_plotting.plot_step2(grid, area, features, buses, datei)
     basic_plotting.plot_step3(grid, area, features, buses, datei)
     basic_plotting.plot_step4(grid, area, features)
 
