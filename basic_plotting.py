@@ -56,7 +56,7 @@ def plot_step1(grid,
     #area.plot(ax=ax, facecolor="lightgrey", edgecolor="black", alpha=0.5)
     #features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
     plt.legend()
-    plt.title('Low-voltage network of Opfingen')
+    #plt.title('Low-voltage network of Opfingen')
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
     plt.show()
@@ -81,7 +81,7 @@ def plot_step2_only_osm(grid,
     features_polygons = features[features.geometry.type.isin(["Polygon", "MultiPolygon"])]
     features_polygons.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.2, transform=ccrs.PlateCarree())
     plt.legend()
-    plt.title('Grid Overview')
+    #plt.title('Grid Overview')
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
     plt.show()
@@ -107,12 +107,12 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
                 .select("GITTER_ID_100m",
                         "x_mp_100m",
                         "y_mp_100m",
-                        "Gas",
+                        "durchschnMieteQM",
                         ).collect()
             )
     zensus = zensus.to_pandas()
 
-    zensus["Gas"] = (zensus["Gas"].astype(str).str.replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
+    zensus["durchschnMieteQM"] = (zensus["durchschnMieteQM"].astype(str).str.replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
 
     # Build Polygons from Census Paoints
     def build_cell(row, half=50):
@@ -130,7 +130,7 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
     zensus_gdf = gpd.GeoDataFrame(zensus, geometry="geometry", crs="EPSG:3035")
     # to EPSG:4326
     zensus_gdf = zensus_gdf.to_crs("EPSG:4326")
-    zensus_voronoi_gdf = zensus_gdf[["geometry", "Gas"]].copy()
+    zensus_voronoi_gdf = zensus_gdf[["geometry", "durchschnMieteQM"]].copy()
 
     # # Creating GeoDataFrame for Census Data using Points
 
@@ -172,7 +172,7 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
 
     # Census as heatmap overlay
     zensus_voronoi_gdf.plot(
-                                    column="Gas",
+                                    column="durchschnMieteQM",
                                     cmap="viridis",
                                     legend=False,
                                     ax=ax,
@@ -193,14 +193,14 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
     # Creating the colorbar
     sm = plt.cm.ScalarMappable(cmap="viridis",
                             norm=plt.Normalize(
-                                vmin=zensus_voronoi_gdf["Gas"].min(),
-                                vmax=zensus_voronoi_gdf["Gas"].max()
+                                vmin=zensus_voronoi_gdf["durchschnMieteQM"].min(),
+                                vmax=zensus_voronoi_gdf["durchschnMieteQM"].max()
                             ))
 
     sm._A = []
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", shrink=0.7)
-    cbar.set_label("Gas")       
-    ax.set_title('Low-voltage network of Opfingen with Generator Types and Census Feature')    
+    cbar.set_label("average rent per square meter")       
+    #ax.set_title('Low-voltage network of Opfingen with Generator Types and Census Feature')    
     ax.legend(loc='lower right')
 
     
@@ -222,12 +222,12 @@ def plot_step3(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
                 .select("GITTER_ID_100m",
                         "x_mp_100m",
                         "y_mp_100m",
-                        "Gas",
+                        "durchschnMieteQM",
                         ).collect()
             )
     zensus = zensus.to_pandas()
 
-    zensus["Gas"] = (zensus["Gas"].astype(str).str.replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
+    zensus["durchschnMieteQM"] = (zensus["durchschnMieteQM"].astype(str).str.replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
 
     # Build Polygons from Census Paoints
     def build_cell(row, half=50):
@@ -245,7 +245,7 @@ def plot_step3(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
     zensus_gdf = gpd.GeoDataFrame(zensus, geometry="geometry", crs="EPSG:3035")
     # to EPSG:4326
     zensus_gdf = zensus_gdf.to_crs("EPSG:4326")
-    zensus_voronoi_gdf = zensus_gdf[["geometry", "Gas"]].copy()
+    zensus_voronoi_gdf = zensus_gdf[["geometry", "durchschnMieteQM"]].copy()
 
     # # Creating GeoDataFrame for Census Data using Points
 
@@ -284,13 +284,13 @@ def plot_step3(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
                 }
     # Defining categories: bus sets, color, label
     gen_categories = [
-        (gen_buses['solar'], 'yellow', 'Solar Generatoren'),
-        (storage_buses['E_Auto'], 'green', 'E-Car Generatoren'),
-        (gen_buses['HP'], 'blue', 'HP Generatoren'),
-        (gen_buses['HP'] & gen_buses['solar'], 'purple', 'HP & Solar Generatoren'),
-        (gen_buses['HP'] & storage_buses['E_Auto'], 'pink', 'HP & E-Car Generatoren'),
-        (gen_buses['solar'] & storage_buses['E_Auto'], 'violet', 'Solar & E-Car Generatoren'),
-        (gen_buses['HP'] & gen_buses['solar'] & storage_buses['E_Auto'], 'orange', 'HP, Solar & E-Car Generatoren')
+        (gen_buses['solar'], 'yellow', 'PV'),
+        (storage_buses['E_Auto'], 'green', 'EV'),
+        (gen_buses['HP'], 'blue', 'HP'),
+        (gen_buses['HP'] & gen_buses['solar'], 'purple', 'HP & PV'),
+        (gen_buses['HP'] & storage_buses['E_Auto'], 'pink', 'HP & EV'),
+        (gen_buses['solar'] & storage_buses['E_Auto'], 'violet', 'PV & EV'),
+        (gen_buses['HP'] & gen_buses['solar'] & storage_buses['E_Auto'], 'orange', 'HP, PV & EV')
                         ]
     
     # Conventional Generators
@@ -320,7 +320,7 @@ def plot_step3(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
 
     # Census as heatmap overlay
     zensus_voronoi_gdf.plot(
-                                    column="Gas",
+                                    column="durchschnMieteQM",
                                     cmap="viridis",
                                     legend=False,
                                     ax=ax,
@@ -379,14 +379,14 @@ def plot_step3(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
     # Creating the colorbar
     sm = plt.cm.ScalarMappable(cmap="viridis",
                             norm=plt.Normalize(
-                                vmin=zensus_voronoi_gdf["Gas"].min(),
-                                vmax=zensus_voronoi_gdf["Gas"].max()
+                                vmin=zensus_voronoi_gdf["durchschnMieteQM"].min(),
+                                vmax=zensus_voronoi_gdf["durchschnMieteQM"].max()
                             ))
 
     sm._A = []
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", shrink=0.7)
-    cbar.set_label("Gas")
-    ax.set_title('Low-voltage network of Opfingen with Generator Types, Census Feature and OSM Features')          
+    cbar.set_label("average rent per square meter")
+    #ax.set_title('Low-voltage network of Opfingen with Generator Types, Census Feature and OSM Features')          
     ax.legend(loc='upper left')
 
 
@@ -421,7 +421,8 @@ def plot_step4(grid,
     grid.generators_t.p_max_pu[solar][:24*7]*grid.generators.at[solar, 'p_nom'].plot(ax=ax, label=f'Solar Generator', linestyle='--')
     
     grid.stores_t.e[hp][:24*7].plot(ax=ax, label=f'Heat Pump', linestyle='--')
-    plt.title(f'Load Profile at a Bus in Opfingen with a solar generator and an heat pump.')
+    #plt.title(f'Load Profile at a Bus in Opfingen with a solar generator and an heat pump.')
+    plt.grid()
     plt.xlabel('Time')
     plt.ylabel('Power (kW)')
     plt.legend()
