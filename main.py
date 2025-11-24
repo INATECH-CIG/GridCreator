@@ -310,15 +310,15 @@ import importlib
 import basic_plotting  
 importlib.reload(basic_plotting)
 if __name__ == "__main__":
-    grid = pypsa.Network(os.path.join('output', 'Opfingen', 'step_5', 'grid.nc'))
-    area = gpd.read_file(os.path.join('output', 'Opfingen', 'step_5', 'area.gpkg'))
-    features = gpd.read_file(os.path.join('output', 'Opfingen', 'step_5', 'features.gpkg'))
-    buses = pd.read_csv(os.path.join('output', 'Opfingen', 'step_5', 'buses.csv'), index_col=0)
-    datei = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
+    grid = pypsa.Network(os.path.join('output', scenario, 'step_5', 'grid.nc'))
+    area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
+    features = gpd.read_file(os.path.join('output', scenario, 'step_5', 'features.gpkg'))
+    buses = pd.read_csv(os.path.join('output', scenario, 'step_5', 'buses.csv'), index_col=0)
+    zensus_path = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
 
-    basic_plotting.plot_step1(grid, area, features)
-    basic_plotting.plot_step2(grid, area, features, buses, datei)
-    basic_plotting.plot_step3(grid, area, features, buses, datei)
+    basic_plotting.plot_step1(grid, area, features, figsize=(5,5), legend_loc='upper left')
+    basic_plotting.plot_step2(grid, area, features, buses, zensus_path, zensus_feature="durchschnMieteQM", zensus_feature_nicename="Average Rent per Square Meter", figsize=(10,10), legend_loc='upper left')
+    basic_plotting.plot_step3(grid, area, features, buses, zensus_path)
     basic_plotting.plot_step4(grid, area, features)
 
 # %%

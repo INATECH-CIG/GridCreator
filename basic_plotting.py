@@ -39,7 +39,10 @@ def plot_grid(grid,
 
 def plot_step1(grid,
               area,
-              features):
+              features,
+              figsize=(10,10),
+              bool_legend=True,
+              legend_loc=None):
     """
     plots the pypsa grid along with OSM data and features.
     Args:
@@ -47,7 +50,7 @@ def plot_step1(grid,
         area (gpd.GeoDataFrame): GeoDataFrame containing OSM area data with geometry.
         features (gpd.GeoDataFrame): GeoDataFrame containing OSM features with geometry.
     """
-    fig, ax = plt.subplots(figsize=(10,10), subplot_kw={'projection': ccrs.PlateCarree()})
+    fig, ax = plt.subplots(figsize=figsize, subplot_kw={'projection': ccrs.PlateCarree()})
     # pypsa grid
     #grid.plot(bus_sizes=1 / 2e9)
     grid.plot(ax=ax, bus_sizes=1 / 2e9, margin=0)
@@ -55,7 +58,14 @@ def plot_step1(grid,
     # ox.plot_graph(area, ax=ax, show=False, close=False)
     #area.plot(ax=ax, facecolor="lightgrey", edgecolor="black", alpha=0.5)
     #features.plot(ax=ax, facecolor="khaki", edgecolor="black", alpha=0.1)
-    plt.legend()
+    if bool_legend == True:
+        handles = [
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='cadetblue', markersize=10),
+            plt.Line2D([0, 1], [0, 0], color='rosybrown', lw=2)
+        ]
+        if legend_loc is None:
+            legend_loc = 'upper right'
+        plt.legend(handles=handles, labels=['Nodes', 'Lines'], loc=legend_loc)
     #plt.title('Low-voltage network of Opfingen')
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
@@ -89,7 +99,15 @@ def plot_step2_only_osm(grid,
 
 
 
-def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDataFrame, buses: pd.DataFrame, zensus: str)->None:
+def plot_step2(grid: pypsa.Network,
+               area: gpd.GeoDataFrame,
+               features: gpd.GeoDataFrame,
+               buses: pd.DataFrame,
+               zensus_path: str,
+               zensus_feature: str,
+               zensus_feature_nicename: str,
+               figsize=(10,10),
+               legend_loc='lower right')->None:
     '''
     plots the pypsa grid along with OSM data and Census features.
     Args:
@@ -99,20 +117,22 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
         buses (pd.DataFrame): DataFrame containing bus information with 'GITTER_ID_100m'.
         zensus (str): Path to the census data CSV file.
     '''
-
+    if zensus_feature is None:
+        warn.warning("No zensus feature provided, defaulting to 'durchschnMieteQM'")
+        zensus_feature = "durchschnMieteQM"
     # Loading Census Data and preparing Polygons
     columns = buses['GITTER_ID_100m'].copy()
-    zensus = (pl.scan_csv(zensus, separator=";")
+    zensus = (pl.scan_csv(zensus_path, separator=";")
                 .filter(pl.col("GITTER_ID_100m").is_in(columns))
                 .select("GITTER_ID_100m",
                         "x_mp_100m",
                         "y_mp_100m",
-                        "durchschnMieteQM",
+                        zensus_feature,
                         ).collect()
             )
     zensus = zensus.to_pandas()
 
-    zensus["durchschnMieteQM"] = (zensus["durchschnMieteQM"].astype(str).str.replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
+    zensus[zensus_feature] = (zensus[zensus_feature].astype(str).str.replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
 
     # Build Polygons from Census Paoints
     def build_cell(row, half=50):
@@ -130,7 +150,7 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
     zensus_gdf = gpd.GeoDataFrame(zensus, geometry="geometry", crs="EPSG:3035")
     # to EPSG:4326
     zensus_gdf = zensus_gdf.to_crs("EPSG:4326")
-    zensus_voronoi_gdf = zensus_gdf[["geometry", "durchschnMieteQM"]].copy()
+    zensus_voronoi_gdf = zensus_gdf[["geometry", zensus_feature]].copy()
 
     # # Creating GeoDataFrame for Census Data using Points
 
@@ -161,7 +181,7 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
 
 
     # Plotting the network
-    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+    fig, ax = plt.subplots(figsize=figsize, subplot_kw={'projection': ccrs.PlateCarree()})
     
     # pypsa plot
     #grid = grid.to_crs("EPSG:25832")
@@ -172,7 +192,7 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
 
     # Census as heatmap overlay
     zensus_voronoi_gdf.plot(
-                                    column="durchschnMieteQM",
+                                    column=zensus_feature,
                                     cmap="viridis",
                                     legend=False,
                                     ax=ax,
@@ -193,15 +213,15 @@ def plot_step2(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDat
     # Creating the colorbar
     sm = plt.cm.ScalarMappable(cmap="viridis",
                             norm=plt.Normalize(
-                                vmin=zensus_voronoi_gdf["durchschnMieteQM"].min(),
-                                vmax=zensus_voronoi_gdf["durchschnMieteQM"].max()
+                                vmin=zensus_voronoi_gdf[zensus_feature].min(),
+                                vmax=zensus_voronoi_gdf[zensus_feature].max()
                             ))
 
     sm._A = []
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", shrink=0.7)
-    cbar.set_label("average rent per square meter")       
+    cbar.set_label(zensus_feature_nicename)       
     #ax.set_title('Low-voltage network of Opfingen with Generator Types and Census Feature')    
-    ax.legend(loc='lower right')
+    ax.legend(loc=legend_loc)
 
     
 def plot_step3(grid: pypsa.Network, area: gpd.GeoDataFrame, features: gpd.GeoDataFrame, buses: pd.DataFrame, zensus: str)->None:
