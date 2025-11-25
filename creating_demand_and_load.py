@@ -260,11 +260,14 @@ def create_commercial(type: str, demand_per_year, index, env):
         # for this quickfix to work you must also change
         # 'pycity_base/classes/demand/electrical_demand.py' line 159 from
         # 'slp_electrical_2019.xlsx' to 'slp_electrical_2019.xls'
-        try:
-            el_demand = ElectricalDemand(env, method=meth, annual_demand=demand_per_year, profile_type=type, weather_file='data/weather/weather_dummy.xlsx')
-            power = el_demand.get_power()
-        except:
-            print('Error: XLDR cannot open xlsx file.\nPlease convert the xlsx files in the pycity_base inputs/standard_load_profile folder to xls format and retry.')
+        el_demand = ElectricalDemand(env,
+                                         method=meth,
+                                         annual_demand=demand_per_year,
+                                         profile_type=type,
+                                         )
+        power = el_demand.get_power()
+        # except:
+        #    print('Error: XLDR cannot open xlsx file.\nPlease convert the xlsx files in the pycity_base inputs/standard_load_profile folder to xls format and retry.')
             # print('Warning: XLDR cannot open xlsx file.\nAttempting to convert xlsx files to xls format...')
             # # convert xlsx files in folder to xls files
             # # get path of the active environment (Conda/Venv) or fall back to the current Python prefix
