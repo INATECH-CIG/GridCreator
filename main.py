@@ -125,8 +125,19 @@ def GridCreator(top: float,
     if 4 in steps:
         # grid might exist already, so we need to load it
         if 1 not in steps:
-            grid = pypsa.Network(os.path.join(output_path, 'step_1', 'grid.nc'))
-            bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
+            try:
+                grid = pypsa.Network(os.path.join(output_path, 'step_1', 'grid.nc'))
+                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
+            except:
+                try:
+                    grid = pypsa.Network(os.path.join(output_path, 'step_2', 'grid.nc'))
+                    bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_2', 'bbox.csv'), header=1))]
+                except:
+                    try:
+                        grid = pypsa.Network(os.path.join(output_path, 'step_3', 'grid.nc'))
+                        bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_3', 'bbox.csv'), header=1))]
+                    except:
+                        raise FileNotFoundError('File "grid.nc" not found. Perform Step 1 first.')
         if not 3 in steps:
             buses_df = pd.read_csv(os.path.join(output_path, 'step_3', 'buses.csv'), index_col=0)
         
@@ -309,16 +320,38 @@ if __name__ == "__main__":
 import importlib
 import basic_plotting  
 importlib.reload(basic_plotting)
-if __name__ == "__main__":
-    grid = pypsa.Network(os.path.join('output', 'Opfingen', 'step_5', 'grid.nc'))
-    area = gpd.read_file(os.path.join('output', 'Opfingen', 'step_5', 'area.gpkg'))
-    features = gpd.read_file(os.path.join('output', 'Opfingen', 'step_5', 'features.gpkg'))
-    buses = pd.read_csv(os.path.join('output', 'Opfingen', 'step_5', 'buses.csv'), index_col=0)
-    datei = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
 
-    basic_plotting.plot_step1(grid, area, features)
-    basic_plotting.plot_step2(grid, area, features, buses, datei)
-    basic_plotting.plot_step3(grid, area, features, buses, datei)
-    basic_plotting.plot_step4(grid, area, features)
+save_plots = True
+if __name__ == "__main__":
+    grid = pypsa.Network(os.path.join('output', scenario, 'step_5', 'grid.nc'))
+    #area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
+    features = gpd.read_file(os.path.join('output', scenario, 'step_3', 'features.gpkg'))
+    buses = pd.read_csv(os.path.join('output', scenario, 'step_3', 'buses.csv'), index_col=0)
+    zensus_path = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
+
+    fig, ax = basic_plotting.plot_step1(grid, figsize=(10,10), legend_loc='lower right', bool_gridlinelabels=True)
+    if save_plots:
+        fig.savefig(os.path.join('output', scenario, 'step1_grid.png'), dpi=300)
+        fig.savefig(os.path.join('output', scenario, 'step1_grid.pdf'))
+
+    zensus_feature = "durchschnMieteQM"
+    zensus_feature_nicename = "Average Rent per Square Meter"
+    fig, ax = basic_plotting.plot_step2(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
+                                        zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), legend_loc='upper left')
+    if save_plots:
+        fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.png'), dpi=300)
+        fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.pdf'))
+
+    fig, ax = basic_plotting.plot_step3(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
+                                        zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), bool_legend=True, legend_loc='upper left',
+                                        plot_trafos=True)
+    if save_plots:
+        fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.png'), dpi=300)
+        fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.pdf'))
+
+    fig, ax = basic_plotting.plot_step4(grid)
+    if save_plots:
+        fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
+        fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
 
 # %%
