@@ -291,7 +291,7 @@ examples = {
 # # grid_1.optimize()
 # %%
 scenario = "Opfingen"
-steps = [4]
+steps = [1,2,3,4,5]
 
 if __name__ == "__main__":
     
@@ -325,8 +325,8 @@ save_plots = True
 if __name__ == "__main__":
     grid = pypsa.Network(os.path.join('output', scenario, 'step_5', 'grid.nc'))
     #area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
-    features = gpd.read_file(os.path.join('output', scenario, 'step_2', 'features.gpkg'))
-    buses = pd.read_csv(os.path.join('output', scenario, 'step_2', 'buses.csv'), index_col=0)
+    features = gpd.read_file(os.path.join('output', scenario, 'step_3', 'features.gpkg'))
+    buses = pd.read_csv(os.path.join('output', scenario, 'step_3', 'buses.csv'), index_col=0)
     zensus_path = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
 
     fig, ax = basic_plotting.plot_step1(grid, figsize=(10,10), legend_loc='lower right', bool_gridlinelabels=True)
@@ -349,7 +349,7 @@ if __name__ == "__main__":
         fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.png'), dpi=300)
         fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.pdf'))
 
-    fig, ax = basic_plotting.plot_step4(grid, area, features)
+    fig, ax = basic_plotting.plot_step4(grid)
     if save_plots:
         fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
         fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
