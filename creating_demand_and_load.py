@@ -8,6 +8,8 @@ import pycity_base.classes.supply.photovoltaic as pv
 import pycity_base.classes.supply.heat_pump as hp
 
 from pycity_base.classes.environment import Environment
+import os
+import sys
 
 '''
 Module for creating demand and load profiles for different technologies.
@@ -252,8 +254,38 @@ def create_commercial(type: str, demand_per_year, index, env):
     else:
         # Strombedarf (stochastisch, mit Geräten & Licht)
         meth = 1
-        el_demand = ElectricalDemand(env, method=meth, annual_demand=demand_per_year, profile_type=type)
-        power = el_demand.get_power()
+        # this is a quickfix to handle XLRDError ".xlsx format not supported" coming from the xlrd library used in pycity_base
+        # try and if fails convert the files from xlsx to xls
+        # TODO remove this when pyCity has fixed this issue
+        try:
+            el_demand = ElectricalDemand(env, method=meth, annual_demand=demand_per_year, profile_type=type, weather_file='data/weather/weather_dummy.xlsx')
+            power = el_demand.get_power()
+        except:
+            print('Warning: XLDR cannot open xlsx file.\nAttempting to convert xlsx files to xls format...')
+            # convert xlsx files in folder to xls files
+            # get path of the active environment (Conda/Venv) or fall back to the current Python prefix
+            active_env_path = os.environ.get('CONDA_PREFIX') or os.environ.get('VIRTUAL_ENV') or sys.prefix
+            active_env_path = os.path.normpath(active_env_path)
+            print(f'Active environment path: {active_env_path}')
+            # join path with folder containing the xlsx files
+            folder = os.path.join(active_env_path, 'Lib', 'site-packages', 'pycity_base', 'inputs', 'standard_load_profile')
+            # transform all xlsx files in the folder to xls files
+            for file in os.listdir(folder):
+                print(f'Checking file: {file}')
+                if file.endswith('.xlsx'):
+                    xlsx_path = os.path.join(folder, file)
+                    xls_path = os.path.join(folder, file.replace('.xlsx', '.xls'))
+                    try:
+                        # read file with pandas and openpyxl engine, then save as xls with xlwt engine
+                        data_xls = pd.read_excel(xlsx_path, engine='openpyxl')
+                        data_xls.to_excel(xls_path, index=False, engine='openpyxl')
+                        print(f'Converted {file} to {os.path.basename(xls_path)}')
+                    except Exception as e:
+                        print(f'Failed to convert {file}: {e}')
+            
+            # retry creating the ElectricalDemand with the new xls file
+            el_demand = ElectricalDemand(env, method=meth, annual_demand=demand_per_year, profile_type=type)
+            power = el_demand.get_power()
 
     # Get electric power in W and convert to MW
     power = power * 1e-6
