@@ -458,12 +458,24 @@ def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame,
     # Compute factor for the bounding box
     # Using the mode of the IDs to represent the area
     id = str(id_df.mode()[0])
+    # factor_area - zensus something in Registerbezirk (Data from Kraftfahrtbundesamt)
+    # data_zensus - census data aggregated for the Registerbezirk
+    # bbox_zensus - census data aggregated for the bounding box
+    # gcp_factors - weighting factors of census features for the technology
+    # data_gcp - number of E-cars in the Registerbezirk
     factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
-    factor_bbox = bbox_zensus @ gcp_factors.loc[technik] / factor_area * data_gcp.loc[id]
-    if factor_bbox < 0:
-        factor_bbox = 0
+    factor_bbox = bbox_zensus @ gcp_factors.loc[technik]
+    tot_number_in_bbox = factor_bbox / factor_area * data_gcp.loc[id]
+    if technik == "E_car":
+        # insert explanation here
+        # TODO Matthias Anzahl Einwohner bis hierhin mitschleifen
+        # tot_number_in_bbox = data_gcp.loc[id] * (Einwohner bbox / Einwohner Area)
+        tot_number_in_bbox = 20 # dummy value for testing
+
+    if tot_number_in_bbox< 0:
+        tot_number_in_bbox = 0
     
-    return arr_factor, factor_bbox
+    return arr_factor, tot_number_in_bbox
         
 
 
