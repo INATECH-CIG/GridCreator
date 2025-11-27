@@ -414,7 +414,7 @@ def permission(buses: pd.DataFrame, input_path: str) -> pd.DataFrame:
     return id
 
 
-def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame, bbox_zensus: pd.Series, technik: str, id_df: pd.Series) -> tuple[pd.Series, float]:
+def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame, bbox_zensus: pd.Series, technik: str, id_df: pd.Series, buses_population=None, gcp_population=None) -> tuple[pd.Series, float]:
     """
     Calculates technology distribution factors for buses and the bounding box 
     based on census and population data.
@@ -464,18 +464,20 @@ def faktoren(buses: pd.DataFrame, gcp_factors: pd.DataFrame, data: pd.DataFrame,
     # gcp_factors - weighting factors of census features for the technology
     # data_gcp - number of E-cars in the Registerbezirk
     factor_area = data_zensus.loc[id] @ gcp_factors.loc[technik]
-    factor_bbox = bbox_zensus @ gcp_factors.loc[technik]
-    tot_number_in_bbox = factor_bbox / factor_area * data_gcp.loc[id]
-    if technik == "E_car":
-        # insert explanation here
-        # TODO Matthias Anzahl Einwohner bis hierhin mitschleifen
-        # tot_number_in_bbox = data_gcp.loc[id] * (Einwohner bbox / Einwohner Area)
-        tot_number_in_bbox = 20 # dummy value for testing
-
-    if tot_number_in_bbox< 0:
-        tot_number_in_bbox = 0
+    factor_bbox = bbox_zensus @ gcp_factors.loc[technik] 
+    nubmer_technik_in_bbox = factor_bbox / factor_area * data_gcp.loc[id]
+    if nubmer_technik_in_bbox < 0:
+        nubmer_technik_in_bbox = 0
+    if technik == 'E_car' and buses_population is not None and gcp_population is not None:
+        print("Using population for E_car calculation")
+        for j, zensus in buses.iterrows():
+            id = str(id_df.loc[j])
+            arr_factor.loc[j] = data_gcp.loc[id] * buses_population.loc[j]['Zensus_Einwohner'] / gcp_population.loc[id]
+            
+        bbox_population = buses_population.groupby(['GITTER_ID_100m']).mean()
+        nubmer_technik_in_bbox = data_gcp.loc[id] * (bbox_population.values.sum() / gcp_population.loc[id])
     
-    return arr_factor, tot_number_in_bbox
+    return arr_factor, nubmer_technik_in_bbox
         
 
 
