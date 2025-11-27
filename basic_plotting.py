@@ -38,14 +38,17 @@ def plot_grid(grid,
 
 
 def plot_step1(grid,
-               bus_sizes=1 / 2e9,
+              bus_sizes=1 / 2e9,
               figsize=(10,10),
               plot_trafos=True,
               bool_legend=True,
               legend_loc=None,
               bool_gridlines=True,
               bool_gridlinelabels=False,
-              title:str=None):
+              title:str=None,
+              legend_fontsize: int = 12,
+              legend_markerscale: float = 1.5,
+              gridlabel_size: int = 12):
     """
     plots the pypsa grid along with OSM data and features.
     Args:
@@ -83,8 +86,22 @@ def plot_step1(grid,
         if legend_loc is None:
             legend_loc = 'upper right'
         plt.legend(handles=handles, labels=labels, loc=legend_loc)
+        ax.legend(
+            handles,
+            labels,
+            loc=legend_loc,
+            fontsize=legend_fontsize,
+            markerscale=legend_markerscale,
+            title="Legend",
+            title_fontsize=legend_fontsize + 1,
+        )
     if title is not None:
         plt.title(title)
+
+    # Tick‑Beschriftungen größer
+    if not bool_gridlinelabels:
+        ax.tick_params(bottom=False, left=False)
+
     if bool_gridlines:
         # Add cartopy gridlines that draw latitude/longitude tick labels and set axis labels with padding
         gl = ax.gridlines(draw_labels=bool_gridlinelabels, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
@@ -95,6 +112,10 @@ def plot_step1(grid,
         except Exception:
             # some cartopy versions use different attributes; ignore if not available
             pass
+
+        if bool_gridlinelabels:
+            gl.xlabel_style = {"size": gridlabel_size}
+            gl.ylabel_style = {"size": gridlabel_size}
 
     plt.tight_layout()
     return fig, ax
@@ -141,7 +162,9 @@ def plot_step2(grid: pypsa.Network,
                bool_legend=True,
                legend_loc='lower right',
                bool_gridlines=True,
-                bool_gridlinelabels=False)->None:
+               bool_gridlinelabels=False,
+               cbar_labelsize: int = 20,
+               cbar_ticksize: int = 15)->None:
     '''
     plots the pypsa grid along with OSM data and Census features.
     Args:
@@ -155,9 +178,9 @@ def plot_step2(grid: pypsa.Network,
         warn.warning("No zensus feature provided, defaulting to 'durchschnMieteQM'")
         zensus_feature = "durchschnMieteQM"
     # Loading Census Data and preparing Polygons
-    columns = buses['GITTER_ID_100m'].copy()
+    ids = buses['GITTER_ID_100m'].copy()
     zensus = (pl.scan_csv(zensus_path, separator=";")
-                .filter(pl.col("GITTER_ID_100m").is_in(columns))
+                .filter(pl.col("GITTER_ID_100m").is_in(ids))
                 .select("GITTER_ID_100m",
                         "x_mp_100m",
                         "y_mp_100m",
@@ -166,7 +189,7 @@ def plot_step2(grid: pypsa.Network,
             )
     zensus = zensus.to_pandas()
 
-    zensus[zensus_feature] = (zensus[zensus_feature].astype(str).str.replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
+    zensus[zensus_feature] = (zensus[zensus_feature].astype(str).str.replace(",", ".", regex=False).replace(r"[^\d\.-]", "",regex=True).replace("", "0").astype(float))
 
     # Build Polygons from Census Paoints
     def build_cell(row, half=50):
@@ -211,7 +234,6 @@ def plot_step2(grid: pypsa.Network,
     # zensus_voronoi_gdf = zensus_gdf[["geometry", "Gas"]].copy()
     # # Building Polygons around Points
     # zensus_voronoi_gdf["geometry"] = build_cell(zensus_voronoi_gdf["geometry"])
-    
     # print(zensus_voronoi_gdf['geometry'].head())
 
 
@@ -244,13 +266,17 @@ def plot_step2(grid: pypsa.Network,
 
     sm._A = []
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", shrink=0.7)
-    cbar.set_label(zensus_feature_nicename)
+    cbar.set_label(zensus_feature_nicename, fontsize=cbar_labelsize)
+    cbar.ax.tick_params(labelsize=cbar_ticksize)
+
+
     if title is not None:
         plt.title(title)       
         #ax.set_title('Low-voltage network of Opfingen with Generator Types and Census Feature')    
     plt.tight_layout()
     return fig, ax
-    
+
+        
 def plot_step3(grid: pypsa.Network,
                features: gpd.GeoDataFrame,
                buses: pd.DataFrame,
@@ -263,8 +289,17 @@ def plot_step3(grid: pypsa.Network,
                bool_legend=True,
                legend_loc='lower right',
                plot_trafos=True,
-                bool_gridlines=True,
-                bool_gridlinelabels=False)->None:
+               bool_gridlines=True,
+               bool_gridlinelabels=False,
+               axis_labelsize: int = 14,
+               tick_labelsize: int = 12,
+               title_size: int = 16,
+               legend_fontsize: int = 12,
+               legend_markerscale: float = 1.5,
+               cbar_labelsize: int = 20,
+               cbar_ticksize: int = 15,
+               xaxis_label_rotation: int = 0,
+               xtick_rotation: int = 0)->None:
     '''
     plots the pypsa grid along with OSM data and Census features.
     Args:
@@ -344,7 +379,8 @@ def plot_step3(grid: pypsa.Network,
         handles, labels = ax.get_legend_handles_labels()
         if legend_loc is None:
             legend_loc = 'upper right'
-        plt.legend(handles=handles, labels=labels, loc=legend_loc)
+        plt.legend(handles=handles, labels=labels, loc=legend_loc, fontsize=legend_fontsize,)
+
         
     plt.tight_layout()
     return fig, ax
