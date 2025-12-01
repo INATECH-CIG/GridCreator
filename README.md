@@ -37,6 +37,14 @@ pip install -r requirements.txt
 ## Necessary input data
 for step 1:
 - download input.zip containing weather data, zensus data and ding0 grids from bwsyncandshare cloud
+
+## References
+Frameworks used in this work:
+- pyPSA
+- pyCity
+- ding0
+Data used in this work:
+- Zensus 2022 Data: © Statistisches Bundesamt (Destatis), 2025
 - 
 
 ## Release Status
