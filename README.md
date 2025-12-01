@@ -8,7 +8,7 @@ The GridCreator is a tool for automated generation of synthetic low-voltage netw
 - Marktstammdatenregister
 
 The tool builds up on existing projects and databases and combines them in a single tool to cover the whole pipeline from choosing an area and timerange to having a fully parametrised distribution grid.
-This is achieved in five steps, that can either be executed individually or subsequently (see also LINK):
+This is achieved in five steps, that can either be executed individually or subsequently (see also https://github.com/INATECH-CIG/GridCreator/blob/main/Steps.pdf):
 - Step 1: load grid data from ding0 for specified coordinates
 - Step 2: Load sozio-economic data from census for the specified coordinates and attach them to network nodes
 - Step 3: Load data on installed units for specified coordinates; distribute PV, Battery Storage, EVs and Heat Pumps according to socio-economic correlations from Step 2 to all nodes in the network
@@ -22,7 +22,7 @@ tbd
 1. Clone the repository and navigate to its directory:
 ```bash
 git clone https://github.com/INATECH-CIG/GridCreator.git
-cd assume
+cd GridCreator
 ```
 2. Set up an environment
 ```bash
@@ -36,10 +36,11 @@ pip install -r requirements.txt
 
 ## Necessary input data
 for step 1:
-- download input.zip containing weather data, zensus data and ding0 grids from bwsyncandshare cloud
+- download input.zip containing weather data, zensus data and ding0 grids from zenodo [LINK]
 
 ## References
 Frameworks used in this work:
+- osmnx https://github.com/gboeing/osmnx
 - pyPSA https://github.com/PyPSA/PyPSA
 - pyCity https://github.com/RWTH-EBC/pyCity
 Data used in this work:
@@ -47,6 +48,9 @@ Data used in this work:
 - OpenStreetMap; https://www.openstreetmap.org
 - Zensus 2022 Data: © Statistisches Bundesamt (Destatis), 2025; https://ergebnisse.zensus2022.de/datenbank/online/
 - Marktstammdatenregister: ©2025 Bundesnetzagentur für Elektrizität, Gas, Telekommunikation, Post und Eisenbahnen; https://www.marktstammdatenregister.de/
+- Kraftfahrtbundesamt - Statistikportal: © Kraftfahrt-Bundesamt, Flensburg; https://das-kba-statistikportal.hub.arcgis.com/
+- Bundesverband Wärmepumpe (BWP) e.V.
+- Climate data store: Era5 hourly data on single levels from 1940 to present; https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download
 
 ## Release Status
 This Repo is in work in progress.
