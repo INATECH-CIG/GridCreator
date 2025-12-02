@@ -15,4 +15,3 @@ shapely
 pyarrow
 cartopy
 cdsapi
-openpyxl
