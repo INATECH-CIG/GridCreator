@@ -391,7 +391,9 @@ def plot_step3(grid: pypsa.Network,
 Der Plot geht nur nach der Optiomierung oder? Da sonst die Stores nicht genutzt sind!
 '''
 def plot_step4(grid,
+               bus = None,
                figsize=(10,10),
+               begin:int=0,
                gridlines=True,
               title:str=None,
               ylabel='Power (kW)',
@@ -403,23 +405,29 @@ def plot_step4(grid,
         area (gpd.GeoDataFrame): GeoDataFrame containing OSM area data with geometry.
         features (gpd.GeoDataFrame): GeoDataFrame containing OSM features with geometry.
     """
-    gen_buses = {
-        'solar': set(grid.generators[grid.generators.index.to_series().str.contains('_solar')]['bus']),
-        'HP': set(grid.generators[grid.generators.index.to_series().str.contains('_HP')]['bus'])
-                }
-    common_buses = gen_buses['solar'] & gen_buses['HP']
-    bus = list(common_buses)[0]
-    # bus random auswählen
+    if bus is None:
+        # grid.generators nach bus  gruppieren
+        grupped = grid.generators.groupby('bus')
+        # als dict speichern
+        gen_dict = {bus: grupped.get_group(bus) for bus in grupped.groups}
+        # keys mti mehr als 1 generator
+        keys_multiple_gens = [key for key, value in gen_dict.items() if len(value) > 1]
+
+        bus = keys_multiple_gens[0]
+
+    # for one week
+    end = begin + 24*7
+
     solar = f'{bus}_solar'
     hp = f'{bus}_HP'
-
     # plot von Load
     fig, ax = plt.subplots(figsize=figsize)
-    grid.loads_t.p_set[f'{bus}_load_1'].iloc[:24*7].plot(ax=ax, label='Load (1 week)', color='cyan')
+    (grid.loads_t.p_set[f'{bus}_load_1'].iloc[begin:end]*1e6).plot(ax=ax, label='Load', color='green')
     # Plot of only one week
-    grid.generators_t.p_max_pu[solar][:24*7]*grid.generators.at[solar, 'p_nom'].plot(ax=ax, label=f'Solar Generator', linestyle='--')
-    
-    grid.stores_t.e[hp][:24*7].plot(ax=ax, label=f'Heat Pump', linestyle='--')
+    if solar in grid.generators.index:
+        (grid.generators_t.p_max_pu[solar][begin:end]*grid.generators.at[solar, 'p_nom']*1e6).plot(ax=ax, label=f'Solar Generator', linestyle='-', color='orange')
+    if hp in grid.generators.index:
+        (grid.generators_t.p_max_pu[hp][begin:end]*grid.generators.at[hp, 'p_nom']*1e3).plot(ax=ax, label=f'Heat Pump', linestyle='-', color='blue')
     if gridlines:
         ax.grid()
     if title is not None:

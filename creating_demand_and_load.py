@@ -224,7 +224,7 @@ def create_hp(index: pd.DatetimeIndex, env: Environment, flow_temp=None, schedul
         schedule = (env.weather.t_ambient < 15).astype(int)
 
     # Calculate electric power in MW
-    power = nominals[0] * 1e-3 * schedule
+    power = nominals[0] * 1e-6 * schedule
 
     # Create Pandas Series with the given index
     power_series = pd.Series(power, index=index, name='hp_power_MW')
