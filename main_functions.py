@@ -151,12 +151,16 @@ def gcp_assignment(buses: pd.DataFrame, gcp_list: list[str], input_path: str) ->
     data_ecar["Schluessel_Zulbz"] = data_ecar["Schluessel_Zulbz"].astype(int).astype(str).str.zfill(5)
     data_ecar.set_index("Schluessel_Zulbz", inplace=True)
 
+    # Extracting Population data for E-car calculation
+    ecar_population = data_ecar['Zensus_Einwohner'].copy()
+
     # Heat pump (HP) data
     data_hp = pd.read_csv(file_hp, sep=",")
     data_hp.set_index("GEN", inplace=True)
 
     # Prepare census columns
     buses_zensus = buses[[col for col in buses.columns if col.startswith("Zensus")]].copy()
+    buses_population = buses[["GITTER_ID_100m", "Zensus_Einwohner"]].copy()
     buses_zensus.drop(columns=["Zensus_Einwohner"], inplace=True)
     buses_zensus = (buses_zensus.astype(str).replace(",", ".", regex=True).apply(pd.to_numeric, errors="coerce").fillna(0.0))
 
@@ -170,6 +174,7 @@ def gcp_assignment(buses: pd.DataFrame, gcp_list: list[str], input_path: str) ->
         df = group.iloc[[0]].copy()
         bbox_zensus_df = pd.concat([bbox_zensus_df, df])
     bbox_zensus = bbox_zensus_df.agg(agg_dict)
+    
 
     # Remove temporary column
     buses_zensus.drop(columns=['GITTER_ID_100m'], inplace=True)
@@ -189,7 +194,7 @@ def gcp_assignment(buses: pd.DataFrame, gcp_list: list[str], input_path: str) ->
         buses_permission = func.permission(buses, input_path)
         technik = 'E_car'
         i = gcp_list.index(technik)
-        buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, gcp_factors, data_ecar, bbox_zensus, 'E_car', buses_permission)
+        buses['Factor_' + technik], factor_bbox[i]  = func.faktoren(buses_zensus, gcp_factors, data_ecar, bbox_zensus, 'E_car', buses_permission, buses_population, ecar_population)
 
     # HP assignment
     if 'HP' in gcp_list:
@@ -734,71 +739,71 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
 
 
-    # Add commercial (Gewerbe) loads based on OSM data
-    if "osm_building" in buses.columns:
-        commercial_buses = buses.index[buses["osm_building"] != 0]
-        commercial_cols = {}
+    # # Add commercial (Gewerbe) loads based on OSM data
+    # if "osm_building" in buses.columns:
+    #     commercial_buses = buses.index[buses["osm_building"] != 0]
+    #     commercial_cols = {}
 
-        # Map OSM building types to internal load types
-        commercial_dict = {
-            'commercial': 'G0',
-            'industrial': 'G0',
-            'office': 'G1',
-            'kiosk': 'G4',
-            'retail': 'G4',
-            'supermarket': 'G4',
-            'warehouse': 'G0',
-            'sports_hall': 'sports',
-            'stadium': 'sports'
-        }
-
-
+    #     # Map OSM building types to internal load types
+    #     commercial_dict = {
+    #         'commercial': 'G0',
+    #         'industrial': 'G0',
+    #         'office': 'G1',
+    #         'kiosk': 'G4',
+    #         'retail': 'G4',
+    #         'supermarket': 'G4',
+    #         'warehouse': 'G0',
+    #         'sports_hall': 'sports',
+    #         'stadium': 'sports'
+    #     }
 
 
 
-        '''
-        Wie viel Verbrauch?????
 
-        https://www.gasag.de/magazin/energiesparen/stromverbrauch-unternehmen/
 
-        Angaben alle nur per m²
+    #     '''
+    #     Wie viel Verbrauch?????
+
+    #     https://www.gasag.de/magazin/energiesparen/stromverbrauch-unternehmen/
+
+    #     Angaben alle nur per m²
         
-        '''
+    #     '''
 
 
 
 
 
-        for bus in commercial_buses:
-            building_type = buses.loc[bus, 'osm_building']
-            if building_type in commercial_dict:
-                load_type = commercial_dict[building_type]
-                power = demand_load.create_commercial(load_type, demand_per_year=1000, index=snapshots, env=environment)
-                grid.add("Load", name=bus + "_commercial", bus=bus)
-                commercial_cols[bus + "_commercial"] = power.values
+    #     for bus in commercial_buses:
+    #         building_type = buses.loc[bus, 'osm_building']
+    #         if building_type in commercial_dict:
+    #             load_type = commercial_dict[building_type]
+    #             power = demand_load.create_commercial(load_type, demand_per_year=1000, index=snapshots, env=environment)
+    #             grid.add("Load", name=bus + "_commercial", bus=bus)
+    #             commercial_cols[bus + "_commercial"] = power.values
 
-        # Append commercial load profiles
-        if commercial_cols:
-            grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(commercial_cols, index=snapshots)], axis=1)
+    #     # Append commercial load profiles
+    #     if commercial_cols:
+    #         grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(commercial_cols, index=snapshots)], axis=1)
 
-    # Add shop loads (OSM 'shop' attribute)
-    if "osm_shop" in buses.columns:
-        shops_buses = buses.index[buses["osm_shop"] != 0]
-        shops_cols = {}
+    # # Add shop loads (OSM 'shop' attribute)
+    # if "osm_shop" in buses.columns:
+    #     shops_buses = buses.index[buses["osm_shop"] != 0]
+    #     shops_cols = {}
 
-        for bus in shops_buses:
-            # Bakeries (G5) get their own load type; others default to G4
-            if buses.loc[bus, 'osm_shop'] == 'bakery':
-                power = demand_load.create_commercial('G5', demand_per_year=1000, index=snapshots, env=environment)
-            else:
-                power = demand_load.create_commercial('G4', demand_per_year=1000, index=snapshots, env=environment)
+    #     for bus in shops_buses:
+    #         # Bakeries (G5) get their own load type; others default to G4
+    #         if buses.loc[bus, 'osm_shop'] == 'bakery':
+    #             power = demand_load.create_commercial('G5', demand_per_year=1000, index=snapshots, env=environment)
+    #         else:
+    #             power = demand_load.create_commercial('G4', demand_per_year=1000, index=snapshots, env=environment)
             
-            grid.add("Load", name=bus + "_Shop", bus=bus)
-            shops_cols[bus + "_Shop"] = power.values
+    #         grid.add("Load", name=bus + "_Shop", bus=bus)
+    #         shops_cols[bus + "_Shop"] = power.values
     
-        # Append shop load profiles
-        if shops_cols:
-            grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(shops_cols, index=snapshots)], axis=1)
+    #     # Append shop load profiles
+    #     if shops_cols:
+    #         grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(shops_cols, index=snapshots)], axis=1)
 
     return grid
 

@@ -107,7 +107,7 @@ def GridCreator(top: float,
     if 3 in steps:
         # step 2 might have been executed before, so we need to get the existing buses_df
         if 2 not in steps:
-            buses_df = pd.read_csv(os.path.join(output_path, 'step_2', 'buses.csv'), index_col=0)
+            buses_df = pd.read_csv(os.path.join(output_path, 'step_5', 'buses.csv'), index_col=0)
         # Define technologies
         gcp = technologies # gcp = generation and consumption plants
         # Assign technologies
@@ -316,42 +316,151 @@ if __name__ == "__main__":
                                            scenario=scenario,
                                            steps=steps,
                                            path='output')
-#%%
+    
+    print(grid.links_t.p_max_pu)
+    print(grid.loads_t.p_set)
+# %%
 import importlib
 import basic_plotting  
 importlib.reload(basic_plotting)
 
 save_plots = True
 if __name__ == "__main__":
-    grid = pypsa.Network(os.path.join('output', scenario, 'step_5', 'grid.nc'))
-    #area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
-    features = gpd.read_file(os.path.join('output', scenario, 'step_3', 'features.gpkg'))
-    buses = pd.read_csv(os.path.join('output', scenario, 'step_3', 'buses.csv'), index_col=0)
+    '''
+    When the grid is reloaded, the time series are no longer available; the data frame is instead filled with NaN values.
+    Plot Step4 therefore only works if the grid is still in memory after creation.
+    '''
+    # grid = pypsa.Network(os.path.join('output', scenario, 'step_5', 'grid.nc'))
+    area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
+    features = gpd.read_file(os.path.join('output', scenario, 'step_5', 'features.gpkg'))
+    buses = pd.read_csv(os.path.join('output', scenario, 'step_5', 'buses.csv'), index_col=0)
     zensus_path = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
 
-    fig, ax = basic_plotting.plot_step1(grid, figsize=(10,10), legend_loc='lower right', bool_gridlinelabels=True)
-    if save_plots:
-        fig.savefig(os.path.join('output', scenario, 'step1_grid.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, 'step1_grid.pdf'))
+    # fig, ax = basic_plotting.plot_step1(grid, figsize=(10,10), legend_loc='upper left', bool_gridlinelabels=True)
+    # if save_plots:
+    #     fig.savefig(os.path.join('output', scenario, 'step1_grid.png'), dpi=300)
+    #     fig.savefig(os.path.join('output', scenario, 'step1_grid.pdf'))
 
     zensus_feature = "durchschnMieteQM"
-    zensus_feature_nicename = "Average Rent per Square Meter"
-    fig, ax = basic_plotting.plot_step2(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
-                                        zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), legend_loc='upper left')
-    if save_plots:
-        fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.pdf'))
+    zensus_feature_nicename = r"Average Rent in €/$m^2$"
+    # fig, ax = basic_plotting.plot_step2(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
+    #                                     zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), legend_loc='upper left', bool_gridlinelabels=False)
+    # if save_plots:
+    #     fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.png'), dpi=300)
+    #     fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.pdf'))
 
-    fig, ax = basic_plotting.plot_step3(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
-                                        zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), bool_legend=True, legend_loc='upper left',
-                                        plot_trafos=True)
-    if save_plots:
-        fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.pdf'))
+    # fig, ax = basic_plotting.plot_step3(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
+    #                                     zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), bool_legend=True, legend_loc='upper left',
+    #                                     plot_trafos=True)
+    # if save_plots:
+    #     fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.png'), dpi=300)
+    #     fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.pdf'))
+
+
 
     fig, ax = basic_plotting.plot_step4(grid)
     if save_plots:
         fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
         fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
 
+# %%
+# grid.generators nach bus  gruppieren
+grupped = grid.generators.groupby('bus')
+# als dict speichern
+gen_dict = {bus: grupped.get_group(bus) for bus in grupped.groups}
+
+# keys mti mehr als 1 generator
+keys_multiple_gens = [key for key, value in gen_dict.items() if len(value) > 1]
+
+print(f'index für solar und hp generatoren an selben bus: solar: {gen_dict[keys_multiple_gens[0]].index[0]}, hp: {gen_dict[keys_multiple_gens[0]].index[1]}')
+
+
+# %%
+import matplotlib.pyplot as plt
+figsize = (10, 5)
+xlabel = 'Time in hours'
+ylabel = 'Power in W'
+gridlines = True
+
+# Am 1. Mai starten
+begin = 24*120  # 120 Tage * 24 Stunden
+end = begin + 24*7  # 1 Woche
+
+
+bus = 'BranchTee_mvgd_32594_lvgd_3031000002_building_727415'
+# bus random auswählen
+solar = f'{bus}_solar'
+hp = f'{bus}_HP'
+
+# plot von Load
+fig, ax = plt.subplots(figsize=figsize)
+(grid.loads_t.p_set[f'{bus}_load_1'].iloc[begin:end]*1e6).plot(ax=ax, label='Load', color='green')
+# Plot of only one week
+(grid.generators_t.p_max_pu[solar][begin:end]*grid.generators.at[solar, 'p_nom']*1e6).plot(ax=ax, label=f'Solar Generator', linestyle='-', color='orange')
+
+(grid.generators_t.p_max_pu[hp][begin:end]*grid.generators.at[hp, 'p_nom']*1e3).plot(ax=ax, label=f'Heat Pump', linestyle='-', color='blue')
+if gridlines:
+    # Stil des Gitternetzes (kann nach Geschmack angepasst werden)
+    ax.grid(
+
+    )
+
+    # Wichtig: Gitternetz **unter** die Daten legen
+    ax.set_axisbelow(True)
+title = None
+if title is not None:
+    plt.title(title)
+# grid hinterlegen
+#plt.grid()
+plt.xlabel(xlabel)
+plt.ylabel(ylabel)
+plt.legend()
+plt.tight_layout()
+
+#%%
+# als pdf speichern
+fig.savefig(os.path.join('output', scenario, f'step4_ts_example_load_solar_hp.pdf'))
+# als png speichern
+
+# %%
+figsize = (10, 5)
+xlabel = 'Time in hours'
+ylabel = 'Power in W'
+gridlines = True
+import matplotlib.pyplot as plt
+begin = 0
+grupped = grid.generators.groupby('bus')
+# als dict speichern
+gen_dict = {bus: grupped.get_group(bus) for bus in grupped.groups}
+
+# keys mti mehr als 1 generator
+keys_multiple_gens = [key for key, value in gen_dict.items() if len(value) > 1]
+
+print(f'index für solar und hp generatoren an selben bus: solar: {gen_dict[keys_multiple_gens[0]].index[0]}, hp: {gen_dict[keys_multiple_gens[0]].index[1]}')
+
+
+# for one week
+end = begin + 24*7
+
+bus =  gen_dict[keys_multiple_gens[0]]
+# bus random auswählen
+solar = gen_dict[keys_multiple_gens[0]].index[0]
+hp = gen_dict[keys_multiple_gens[0]].index[1]
+# plot von Load
+fig, ax = plt.subplots(figsize=figsize)
+(grid.loads_t.p_set[f'{bus}_load_1'].iloc[begin:end]*1e6).plot(ax=ax, label='Load', color='green')
+# Plot of only one week
+(grid.generators_t.p_max_pu[solar][begin:end]*grid.generators.at[solar, 'p_nom']*1e6).plot(ax=ax, label=f'Solar Generator', linestyle='-', color='orange')
+
+(grid.generators_t.p_max_pu[hp][begin:end]*grid.generators.at[hp, 'p_nom']*1e3).plot(ax=ax, label=f'Heat Pump', linestyle='-', color='blue')
+if gridlines:
+    ax.grid()
+if title is not None:
+    plt.title(title)
+
+plt.grid()
+plt.xlabel(xlabel)
+plt.ylabel(ylabel)
+plt.legend()
+plt.tight_layout()
 # %%
