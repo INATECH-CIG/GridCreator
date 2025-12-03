@@ -239,7 +239,7 @@ def save_output_data(grid,
     # Save grid data
     # Prevent overwriting an existent grid with an empty one (might be empty if step 1 is not selected)
     if not grid.buses.empty:
-        grid.export_to_netcdf(os.path.join(output_dir, "grid.nc"))
+        grid.export_to_csv_folder(os.path.join(output_dir, "grid"))
     
     # safe adjusted bbox
     pd.DataFrame([bbox],

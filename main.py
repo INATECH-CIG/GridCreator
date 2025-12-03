@@ -231,8 +231,7 @@ if __name__ == "__main__":
                                            steps=steps,
                                            path='output')
     
-    print(grid.links_t.p_max_pu)
-    print(grid.loads_t.p_set)
+
 # %%
 import importlib
 import basic_plotting  
@@ -244,7 +243,8 @@ if __name__ == "__main__":
     When the grid is reloaded, the time series are no longer available; the data frame is instead filled with NaN values.
     Plot Step4 therefore only works if the grid is still in memory after creation.
     '''
-    grid = pypsa.Network(os.path.join('output', scenario, 'step_5', 'grid.nc'))
+    grid_2 = pypsa.Network()
+    grid_2.import_from_csv_folder('output', scenario, 'step_5', 'grid')
     area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
     features = gpd.read_file(os.path.join('output', scenario, 'step_5', 'features.gpkg'))
     buses = pd.read_csv(os.path.join('output', scenario, 'step_5', 'buses.csv'), index_col=0)
@@ -277,3 +277,6 @@ if __name__ == "__main__":
         fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
         fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
 
+
+
+# %%

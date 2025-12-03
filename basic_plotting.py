@@ -50,15 +50,14 @@ def plot_step1(grid,
               legend_markerscale: float = 1.5,
               gridlabel_size: int = 12):
     """
-    plots the pypsa grid along with OSM data and features.
+    plots the pypsa grid.
     Args:
         grid (pypsa.Network): The power system network containing buses and generators.
-        area (gpd.GeoDataFrame): GeoDataFrame containing OSM area data with geometry.
-        features (gpd.GeoDataFrame): GeoDataFrame containing OSM features with geometry.
+    Returns:
+        fig, ax: Matplotlib figure and axis objects.
     """
     fig, ax = plt.subplots(figsize=figsize, subplot_kw={'projection': ccrs.PlateCarree()})
     # pypsa grid
-    #grid.plot(bus_sizes=1 / 2e9)
     grid.plot(ax=ax, bus_sizes=bus_sizes, margin=0)
     
     if plot_trafos:
@@ -98,7 +97,7 @@ def plot_step1(grid,
     if title is not None:
         plt.title(title)
 
-    # Tick‑Beschriftungen größer
+    # Customize gridlines and labels
     if not bool_gridlinelabels:
         ax.tick_params(bottom=False, left=False)
 
@@ -132,11 +131,12 @@ def plot_step2_only_osm(grid,
                         bool_gridlinelabels=False,
                         title:str=None):
     """
-    plots the pypsa grid along with OSM data and features.
+    plots the pypsa grid along with OSM data features.
     Args:
         grid (pypsa.Network): The power system network containing buses and generators.
-        area (gpd.GeoDataFrame): GeoDataFrame containing OSM area data with geometry.
         features (gpd.GeoDataFrame): GeoDataFrame containing OSM features with geometry.
+    Returns:
+        fig, ax: Matplotlib figure and axis objects.
     """
     fig, ax = plot_step1(grid, bus_sizes, figsize, plot_trafos, bool_legend,
                          legend_loc, bool_gridlines, bool_gridlinelabels)    
@@ -169,10 +169,13 @@ def plot_step2(grid: pypsa.Network,
     plots the pypsa grid along with OSM data and Census features.
     Args:
         grid (pypsa.Network): The power system grid containing buses and generators.
-        area (gpd.GeoDataFrame): GeoDataFrame containing OSM area data with geometry.
         features (gpd.GeoDataFrame): GeoDataFrame containing OSM features with geometry.
         buses (pd.DataFrame): DataFrame containing bus information with 'GITTER_ID_100m'.
-        zensus (str): Path to the census data CSV file.
+        zensus_path (str): Path to the census data CSV file.
+        zensus_feature (str): The specific feature from the census data to be visualized.
+        zensus_feature_nicename (str): A user-friendly name for the census feature to be used in the plot.
+    Returns:
+        fig, ax: Matplotlib figure and axis objects.
     '''
     if zensus_feature is None:
         warn.warning("No zensus feature provided, defaulting to 'durchschnMieteQM'")
@@ -209,33 +212,6 @@ def plot_step2(grid: pypsa.Network,
     zensus_gdf = zensus_gdf.to_crs("EPSG:4326")
     zensus_voronoi_gdf = zensus_gdf[["geometry", zensus_feature]].copy()
 
-    # # Creating GeoDataFrame for Census Data using Points
-
-    # def build_cell(geometries):
-    #     polygons = []
-    #     # in degrees, 100m ~ 0.0009°
-    #     half = 0.00045
-    #     for point in geometries:
-    #         x = point.x
-    #         y = point.y
-    #         polygon = Polygon([
-    #             (x - half, y - half),
-    #             (x - half, y + half),
-    #             (x + half, y + half),
-    #             (x + half, y - half)
-    #         ])
-    #         polygons.append(polygon)
-    #     return polygons
-
-    # zensus["geometry"] = zensus.apply(lambda row: Point(row["x_mp_100m"], row["y_mp_100m"]), axis=1)
-    # zensus_gdf = gpd.GeoDataFrame(zensus, geometry="geometry", crs="EPSG:3035")
-    # # to EPSG:4326
-    # zensus_gdf = zensus_gdf.to_crs("EPSG:4326")
-    # zensus_voronoi_gdf = zensus_gdf[["geometry", "Gas"]].copy()
-    # # Building Polygons around Points
-    # zensus_voronoi_gdf["geometry"] = build_cell(zensus_voronoi_gdf["geometry"])
-    # print(zensus_voronoi_gdf['geometry'].head())
-
 
     # Plotting the network
     fig, ax = plot_step2_only_osm(grid, features, bus_sizes, figsize, plot_trafos, bool_legend,
@@ -271,8 +247,7 @@ def plot_step2(grid: pypsa.Network,
 
 
     if title is not None:
-        plt.title(title)       
-        #ax.set_title('Low-voltage network of Opfingen with Generator Types and Census Feature')    
+        plt.title(title)           
     plt.tight_layout()
     return fig, ax
 
@@ -301,13 +276,16 @@ def plot_step3(grid: pypsa.Network,
                xaxis_label_rotation: int = 0,
                xtick_rotation: int = 0)->None:
     '''
-    plots the pypsa grid along with OSM data and Census features.
+    plots the pypsa grid along with OSM data and Census features and assigned generators.
     Args:
         grid (pypsa.Network): The power system grid containing buses and generators.
-        area (gpd.GeoDataFrame): GeoDataFrame containing OSM area data with geometry.
         features (gpd.GeoDataFrame): GeoDataFrame containing OSM features with geometry.
         buses (pd.DataFrame): DataFrame containing bus information with 'GITTER_ID_100m'.
-        zensus (str): Path to the census data CSV file.
+        zensus_path (str): Path to the census data CSV file.
+        zensus_feature (str): The specific feature from the census data to be visualized.
+        zensus_feature_nicename (str): A user-friendly name for the census feature to be used in the plot.
+    Returns:
+        fig, ax: Matplotlib figure and axis objects.
     '''
 
     # Filtering generators and storages
@@ -386,10 +364,6 @@ def plot_step3(grid: pypsa.Network,
     return fig, ax
 
 
-
-'''
-Der Plot geht nur nach der Optiomierung oder? Da sonst die Stores nicht genutzt sind!
-'''
 def plot_step4(grid,
                bus = None,
                figsize=(10,10),
@@ -399,20 +373,21 @@ def plot_step4(grid,
               ylabel='Power (kW)',
               xlabel='Time'):
     """
-    plots the pypsa grid along with OSM data and features.
+    Plots the load, solar generator and heat pump time series for a specified bus over one week.
+    If no bus is specified, the first bus with more than one generator is selected.
     Args:
-        grid (pypsa.Network): The power system grid containing buses and generators.
-        area (gpd.GeoDataFrame): GeoDataFrame containing OSM area data with geometry.
-        features (gpd.GeoDataFrame): GeoDataFrame containing OSM features with geometry.
+        grid (pypsa.Network): The power system network containing buses and generators.
+        bus (str, optional): The bus to plot. If None, the first bus with more than one generator is selected.
+    Returns:
+        fig, ax: Matplotlib figure and axis objects.
     """
     if bus is None:
-        # grid.generators nach bus  gruppieren
-        grupped = grid.generators.groupby('bus')
-        # als dict speichern
-        gen_dict = {bus: grupped.get_group(bus) for bus in grupped.groups}
-        # keys mti mehr als 1 generator
+        # Grouping generators by buses
+        grouped = grid.generators.groupby('bus')
+        gen_dict = {bus: grouped.get_group(bus) for bus in grouped.groups}
+        # keys with multiple generators
         keys_multiple_gens = [key for key, value in gen_dict.items() if len(value) > 1]
-
+        # select the first one
         bus = keys_multiple_gens[0]
 
     # for one week
@@ -420,14 +395,14 @@ def plot_step4(grid,
 
     solar = f'{bus}_solar'
     hp = f'{bus}_HP'
-    # plot von Load
+    # plot of Load
     fig, ax = plt.subplots(figsize=figsize)
     (grid.loads_t.p_set[f'{bus}_load_1'].iloc[begin:end]*1e6).plot(ax=ax, label='Load', color='green')
     # Plot of only one week
     if solar in grid.generators.index:
         (grid.generators_t.p_max_pu[solar][begin:end]*grid.generators.at[solar, 'p_nom']*1e6).plot(ax=ax, label=f'Solar Generator', linestyle='-', color='orange')
     if hp in grid.generators.index:
-        (grid.generators_t.p_max_pu[hp][begin:end]*grid.generators.at[hp, 'p_nom']*1e3).plot(ax=ax, label=f'Heat Pump', linestyle='-', color='blue')
+        (grid.generators_t.p_max_pu[hp][begin:end]*grid.generators.at[hp, 'p_nom']*1e6).plot(ax=ax, label=f'Heat Pump', linestyle='-', color='blue')
     if gridlines:
         ax.grid()
     if title is not None:
