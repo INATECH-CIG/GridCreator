@@ -109,6 +109,10 @@ def compute_bbox_from_buses(net: pypsa.Network) -> list[float]:
 
     return bbox
 
+def ensure_dict(v):
+    if isinstance(v, str):
+        return json.loads(v)
+    return v  # already a dict (or something else)
 
 def federal_state(buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -126,7 +130,7 @@ def federal_state(buses: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
 
     # Prepare reference points (federal state data)
     data = data.copy()
-    data["geo_point_2d"] = data["geo_point_2d"].apply(json.loads)
+    data["geo_point_2d"] = data["geo_point_2d"].apply(ensure_dict)
     ref_lon = data["geo_point_2d"].apply(lambda d: d["lon"])
     ref_lat = data["geo_point_2d"].apply(lambda d: d["lat"])
     ref_points = np.vstack((ref_lon, ref_lat)).T
