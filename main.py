@@ -244,7 +244,7 @@ if save_plots:
     Plotting Step4 therefore only works if the grid is loaded from csv files.
     '''
     grid_2 = pypsa.Network()
-    grid_2.import_from_csv_folder('output', scenario, 'step_5', 'grid')
+    grid_2.import_from_csv_folder(os.path.join('output', scenario, 'step_5', 'grid'))
     area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
     features = gpd.read_file(os.path.join('output', scenario, 'step_5', 'features.gpkg'))
     buses = pd.read_csv(os.path.join('output', scenario, 'step_5', 'buses.csv'), index_col=0)
