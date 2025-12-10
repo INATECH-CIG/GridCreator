@@ -36,7 +36,7 @@ pip install -r requirements.txt
 
 ## Necessary input data
 Download input.zip containing weather data, zensus data and ding0 grids from zenodo [LINK]
-Place the input folder in your GridCreator repository. The subfolders "grids", "weather_2013", "zensus_daten" and the files should for example be in C:/Users/YourName/GridCreator/input
+Unpack and place the folder "input" in your GridCreator repository. The subfolders "grids", "weather_2013", "zensus_daten" and the files should for example be in C:/Users/YourName/GridCreator/input
 
 ## Generate your first grid
 - in main.py: add your scenario in the examples dict using the coordinates of your bounding box
