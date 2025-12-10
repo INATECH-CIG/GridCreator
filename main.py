@@ -238,10 +238,10 @@ import basic_plotting
 importlib.reload(basic_plotting)
 
 save_plots = True
-if __name__ == "__main__":
+if save_plots:
     '''
-    When the grid is reloaded, the time series are no longer available; the data frame is instead filled with NaN values.
-    Plot Step4 therefore only works if the grid is still in memory after creation.
+    When the grid is reloaded from a .nc file, the time series are no longer available; the data frame is instead filled with NaN values.
+    Plotting Step4 therefore only works if the grid is loaded from csv files.
     '''
     grid_2 = pypsa.Network()
     grid_2.import_from_csv_folder('output', scenario, 'step_5', 'grid')
@@ -270,13 +270,7 @@ if __name__ == "__main__":
         fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.png'), dpi=300)
         fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.pdf'))
 
-
-
     fig, ax = basic_plotting.plot_step4(grid)
     if save_plots:
         fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
         fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
-
-
-
-# %%
