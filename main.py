@@ -248,8 +248,8 @@ if save_plots:
     When the grid is reloaded from a .nc file, the time series are no longer available; the data frame is instead filled with NaN values.
     Plotting Step4 therefore only works if the grid is loaded from csv files.
     '''
-    grid_2 = pypsa.Network()
-    grid_2.import_from_csv_folder(os.path.join('output', scenario, 'step_5', 'grid'))
+    grid = pypsa.Network()
+    grid.import_from_csv_folder(os.path.join('output', scenario, 'step_5', 'grid'))
     area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
     features = gpd.read_file(os.path.join('output', scenario, 'step_5', 'features.gpkg'))
     buses = pd.read_csv(os.path.join('output', scenario, 'step_5', 'buses.csv'), index_col=0)

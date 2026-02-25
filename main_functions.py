@@ -278,9 +278,9 @@ def appartments_assignment(buses: pd.DataFrame) -> pd.DataFrame:
 
             # Randomly assign an apartment type to each bus based on shares
             for i in group.index:
-                print('i, ', i)
+                # print('i, ', i)
                 random_value = np.random.rand()
-                print('random_value, ', random_value)
+                # print('random_value, ', random_value)
                 if random_value < typ1_share:
                     buses.at[i, 'Bus_1_Wohnung'] = 1
                 elif random_value < typ1_share + typ2_share:
@@ -296,33 +296,33 @@ def appartments_assignment(buses: pd.DataFrame) -> pd.DataFrame:
             bus_list = []
             apartments_assigned = 0
             for bus_index in group.index:
-                print('bus_index, ', bus_index)
+                # print('bus_index, ', bus_index)
                 if buses.at[bus_index, 'Bus_1_Wohnung'] == 1:
-                    print('1 Wohnung')
+                    # print('1 Wohnung')
                     bus_list.extend([bus_index] * 1)
                     buses.at[bus_index, 'Haushalte'] = 1
                     buses.at[bus_index, 'Bewohnerinnen'] = 1
                     apartments_assigned += 1
                 if buses.at[bus_index, 'Bus_2_Wohnungen'] == 1:
-                    print('2 Wohnungen')
+                    # print('2 Wohnungen')
                     bus_list.extend([bus_index] * 2)
                     buses.at[bus_index, 'Haushalte'] = 2
                     buses.at[bus_index, 'Bewohnerinnen'] = 2
                     apartments_assigned += 2
                 if buses.at[bus_index, 'Bus_3bis6_Wohnungen'] == 1:
-                    print('3 bis 6 Wohnungen')
+                    # print('3 bis 6 Wohnungen')
                     bus_list.extend([bus_index] * 3)
                     buses.at[bus_index, 'Haushalte'] = 3
                     buses.at[bus_index, 'Bewohnerinnen'] = 3
                     apartments_assigned += 3
                 if buses.at[bus_index, 'Bus_7bis12_Wohnungen'] == 1:
-                    print('7 bis 12 Wohnungen')
+                    # print('7 bis 12 Wohnungen')
                     bus_list.extend([bus_index] * 7)
                     buses.at[bus_index, 'Haushalte'] = 7
                     buses.at[bus_index, 'Bewohnerinnen'] = 7
                     apartments_assigned += 7
                 if buses.at[bus_index, 'Bus_13undmehr_Wohnungen'] == 1:
-                    print('13 und mehr Wohnungen')
+                    # print('13 und mehr Wohnungen')
                     bus_list.extend([bus_index] * 13)
                     buses.at[bus_index, 'Haushalte'] = 13
                     buses.at[bus_index, 'Bewohnerinnen'] = 13
@@ -363,7 +363,7 @@ def appartments_assignment(buses: pd.DataFrame) -> pd.DataFrame:
             residents_distributed = apartments_assigned
             while residents_distributed < resident_count:
                 if len(bus_list) == 0:
-                    print("Anzahl an Einwohner, die nicht verteilt werden konnten: ", resident_count - residents_distributed)
+                    # print("Anzahl an Einwohner, die nicht verteilt werden konnten: ", resident_count - residents_distributed)
                     break
                 # Select a random index from the list
                 random_index = np.random.choice(bus_list)
@@ -518,7 +518,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     
     if method == 0:
         # Generate for each household type 10 different profiles
-        print("Generating load profiles for households...")
+        # print("Generating load profiles for households...")
         power_dict = {}
         occupants_dict = {}
 
@@ -626,6 +626,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
 
     # Assign loads and EVs to each bus
     for bus in buses.index:
+        # # Adding loads, only if there are no loads assignes yet
         # existing = grid.loads[(grid.loads['bus'] == bus)]
         # if existing.empty:
 
@@ -643,7 +644,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         while remaining_residents > 0:
             persons = min(remaining_residents, 5)  # Nimm maximal 5 Personen für den Haushalt
             buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
-    print("Loads and EVs assigned to the grid.")
+    # print("Loads and EVs assigned to the grid.")
     
     # Combine all generated profiles into PyPSA objects
     grid.loads_t.p_set = pd.concat([grid.loads_t.p_set, pd.DataFrame(load_cols)], axis=1)
@@ -662,9 +663,9 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
 
     # Ensure a minimum solar capacity of 0.25 kW
     for bus in solar_buses:
-        print('Power_solar: ', buses.loc[bus, 'Power_solar'])
+        # print('Power_solar: ', buses.loc[bus, 'Power_solar'])
         if buses.loc[bus, 'Power_solar'] < 0.25:  # Minimum 0.25 kW
-            print('Power_solar is less than 0.25, setting to 0.25')
+            # print('Power_solar is less than 0.25, setting to 0.25')
             buses.loc[bus, 'Power_solar'] = 0.25
 
     solar_cols = {}
