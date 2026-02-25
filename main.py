@@ -185,6 +185,11 @@ examples = {
                             "bottom": 49.372485, # Lower latitude
                             "left":  12.703688,   # Right longitude
                             "right":  12.704  # Left longitude
+    },
+    "South Berlin": {"top":  52.396954, # Upper latitude
+                            "bottom": 52.390330, # Lower latitude
+                            "left":  13.267724,   # Right longitude
+                            "right":  13.273824   # Left longitude
     }
 }
 
@@ -204,7 +209,7 @@ examples = {
 
 # grid_1.optimize()
 # %%
-scenario = "Opfingen"
+scenario = "Ramiz"
 steps = [1,2,3,4,5]
 
 if __name__ == "__main__":
@@ -243,8 +248,9 @@ if __name__ == "__main__":
     When the grid is reloaded, the time series are no longer available; the data frame is instead filled with NaN values.
     Plot Step4 therefore only works if the grid is still in memory after creation.
     '''
-    grid_2 = pypsa.Network()
-    grid_2.import_from_csv_folder('output', scenario, 'step_5', 'grid')
+    # grid = pypsa.Network()
+    # grid.import_from_csv_folder('output', scenario, 'step_5', 'grid')
+    grid = pypsa.Network('Test.nc')
     area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
     features = gpd.read_file(os.path.join('output', scenario, 'step_5', 'features.gpkg'))
     buses = pd.read_csv(os.path.join('output', scenario, 'step_5', 'buses.csv'), index_col=0)
@@ -272,10 +278,10 @@ if __name__ == "__main__":
 
 
 
-    fig, ax = basic_plotting.plot_step4(grid)
-    if save_plots:
-        fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
+    # fig, ax = basic_plotting.plot_step4(grid)
+    # if save_plots:
+    #     fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
+    #     fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
 
 
 

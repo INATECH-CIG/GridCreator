@@ -486,10 +486,10 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     grid.set_snapshots(snapshots)
 
 
-    # Remove all loads and storage units first
-    grid.loads.drop(grid.loads.index, inplace=True)
-    grid.storage_units.drop(grid.storage_units.index, inplace=True)
-    grid.generators.drop(grid.generators.index, inplace=True)
+    # # Remove all loads and storage units first
+    # grid.loads.drop(grid.loads.index, inplace=True)
+    # grid.storage_units.drop(grid.storage_units.index, inplace=True)
+    # grid.generators.drop(grid.generators.index, inplace=True)
 
 
     # Dictionary for adding loads
