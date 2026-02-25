@@ -14,7 +14,7 @@ Main module for the GridCreator tool.
 Handles the overall workflow including data preparation, grid creation, technology assignment, load profile generation.
 '''
 
-#%%
+ #%%
 def GridCreator(top: float,
                 bottom: float,
                 left: float,
@@ -185,6 +185,11 @@ examples = {
                             "bottom": 49.372485, # Lower latitude
                             "left":  12.703688,   # Right longitude
                             "right":  12.704  # Left longitude
+    },
+    "South Berlin": {"top":  52.396954, # Upper latitude
+                            "bottom": 52.390330, # Lower latitude
+                            "left":  13.267724,   # Right longitude
+                            "right":  13.273824   # Left longitude
     }
 }
 
@@ -204,7 +209,7 @@ examples = {
 
 # grid_1.optimize()
 # %%
-scenario = "Opfingen"
+scenario = "South Berlin"
 steps = [1,2,3,4,5]
 
 if __name__ == "__main__":

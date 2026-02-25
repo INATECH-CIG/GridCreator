@@ -486,10 +486,10 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     grid.set_snapshots(snapshots)
 
 
-    # Remove all loads and storage units first
-    grid.loads.drop(grid.loads.index, inplace=True)
-    grid.storage_units.drop(grid.storage_units.index, inplace=True)
-    grid.generators.drop(grid.generators.index, inplace=True)
+    # # Remove all loads and storage units first
+    # grid.loads.drop(grid.loads.index, inplace=True)
+    # grid.storage_units.drop(grid.storage_units.index, inplace=True)
+    # grid.generators.drop(grid.generators.index, inplace=True)
 
 
     # Dictionary for adding loads
@@ -626,23 +626,23 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
 
     # Assign loads and EVs to each bus
     for bus in buses.index:
-        existing = grid.loads[(grid.loads['bus'] == bus)]
-        if existing.empty:
+        # existing = grid.loads[(grid.loads['bus'] == bus)]
+        # if existing.empty:
 
-            remaining_residents = int(round(buses.loc[bus, 'Bewohnerinnen']))
-            call_counter = 0
+        remaining_residents = int(round(buses.loc[bus, 'Bewohnerinnen']))
+        call_counter = 0
 
-            # Assign loads by household type
-            for household_type, persons in household_types.items():
-                n_households = int(buses.loc[bus, household_type])
-                if n_households > 0:
-                    for i in range(n_households):
-                        buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
+        # Assign loads by household type
+        for household_type, persons in household_types.items():
+            n_households = int(buses.loc[bus, household_type])
+            if n_households > 0:
+                for i in range(n_households):
+                    buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(household_type, persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
 
 
-            while remaining_residents > 0:
-                persons = min(remaining_residents, 5)  # Nimm maximal 5 Personen für den Haushalt
-                buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
+        while remaining_residents > 0:
+            persons = min(remaining_residents, 5)  # Nimm maximal 5 Personen für den Haushalt
+            buses, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter = house_and_car(f"Rest_{persons}_Persons", persons, buses, bus, remaining_residents, load_cols, e_car_charging, e_car_driving, e_car_buses, call_counter, grid, snapshots, environment, method)
     print("Loads and EVs assigned to the grid.")
     
     # Combine all generated profiles into PyPSA objects
