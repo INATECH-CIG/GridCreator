@@ -35,7 +35,7 @@ pip install -r requirements.txt
 ```
 
 ## Necessary input data
-Download input.zip containing weather data, zensus data and ding0 grids from zenodo [LINK]
+Download input.zip containing weather data, zensus data and ding0 grids from zenodo: https://zenodo.org/records/17884917
 Unpack and place the folder "input" in your GridCreator repository. The subfolders "grids", "weather_2013", "zensus_daten" and the files should for example be in C:/Users/YourName/GridCreator/input
 
 ## Generate your first grid
@@ -60,4 +60,4 @@ Data used in this work:
 - "georef-germany-postleitzahl.geojson": Postleitzahlen Deutschland; from https://www.govdata.de/suche/daten/deutschland-postleitzahlen under „Datenlizenz Deutschland – Namensnennung – Version 2.0" (https://www.govdata.de/dl-de/by-2-0)
 
 ## Release Status
-This Repo is in work in progress.
+This Repo is in work in progress and has not yet been thoroughly validated.
