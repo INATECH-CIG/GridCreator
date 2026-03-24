@@ -8,11 +8,21 @@ import geopandas as gpd
 import pandas as pd
 
 import pypsa
+from enum import Enum
 
 '''
 Main module for the GridCreator tool.
 Handles the overall workflow including data preparation, grid creation, technology assignment, load profile generation.
 '''
+
+class CreatorStep(Enum):
+    SAVE_INPUT = 0
+    CREATE_GRID = 1
+    LOAD_OSM = 2
+    ASSIGN_TECHNOLOGIES = 3
+    ASSIGN_LOAD = 4
+    PREPARE = 5
+    OPTIMIZE = 6
 
  #%%
 def GridCreator(top: float,
@@ -20,7 +30,7 @@ def GridCreator(top: float,
                 left: float,
                 right: float,
                 scenario: str,
-                steps=[1,2,3,4,5],
+                steps: list[CreatorStep]=[1,2,3,4,5],
                 technologies=['solar', 'E_car', 'HP'],
                 load_method: int = 0,
                 buses_df = pd.DataFrame(),
@@ -41,7 +51,7 @@ def GridCreator(top: float,
         bottom: Lower latitude
         left: Left longitude
         right: Right longitude
-        steps: List of steps to execute (1-5)
+        steps: List of CreatorSteps to execute (1-5)
         technologies: List of technologies to consider (e.g., ['solar', 'E_car', 'HP'])
         load_method: Method for load profile generation (0: Creation of 10 individual profiles for each household type, random assignment of profiles to each household type
                                                          1: Creation of individual profiles for each household)
