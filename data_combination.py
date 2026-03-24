@@ -2,7 +2,6 @@ import numpy as np
 import scipy.spatial as spatial
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point
 import networkx as nx
 from dicts import generator_agg_dict
 

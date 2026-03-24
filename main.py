@@ -138,7 +138,7 @@ def GridCreator(top: float,
                         bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_3', 'bbox.csv'), header=1))]
                     except:
                         raise FileNotFoundError('File "grid.nc" not found. Perform Step 1 first.')
-        if not 3 in steps:
+        if 3 not in steps:
             buses_df = pd.read_csv(os.path.join(output_path, 'step_3', 'buses.csv'), index_col=0)
         
         # Add time series
@@ -277,5 +277,5 @@ if save_plots:
 
     fig, ax = basic_plotting.plot_step4(grid)
     if save_plots:
-        fig.savefig(os.path.join('output', scenario, f'step4_ts.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, f'step4_ts.pdf'))
+        fig.savefig(os.path.join('output', scenario, 'step4_ts.png'), dpi=300)
+        fig.savefig(os.path.join('output', scenario, 'step4_ts.pdf'))

@@ -6,8 +6,6 @@ import osmnx as ox
 import scipy.spatial as spatial
 import numpy as np
 import json
-from functools import reduce
-import numpy as np
 import ast
 import random
 import xarray as xr

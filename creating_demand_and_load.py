@@ -8,8 +8,6 @@ import pycity_base.classes.supply.photovoltaic as pv
 import pycity_base.classes.supply.heat_pump as hp
 
 from pycity_base.classes.environment import Environment
-import os
-import sys
 
 '''
 Module for creating demand and load profiles for different technologies.
