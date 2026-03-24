@@ -119,31 +119,30 @@ def extract_lv_subnetwork_to_nearest_transformers(start_buses: pd.DataFrame, pat
 
     # Components that are associated with buses
     components_with_bus = [
-        "Bus", "Generator", "Load", "Shunt", "Store",
-        "StorageUnit", "Line", "Link", "Transformer", "Switch"
+        "buses", "generators", "loads", "stores",
+        "storage_units", "lines", "links", "transformers"
     ]
 
     for comp in components_with_bus:
-        df = getattr(grid, comp.lower() + "s", None)
+        df = getattr(grid, comp, None)
         if df is None or df.empty:
             continue
         
         # Keep only elements fully connected to relevant LV buses
-        if comp in ["Line", "Link", "Transformer", "Switch"]:
+        if comp in ["lines", "links", "transformers"]:
             mask = df["bus0"].isin(relevant_buses) & df["bus1"].isin(relevant_buses)
         else:
             mask = df["bus"].isin(relevant_buses)
 
-        setattr(new_grid, comp.lower() + "s", df[mask].copy())
+        setattr(new_grid, comp, df[mask].copy())
 
     # Set buses explicitly
     new_grid.buses = grid.buses.loc[list(relevant_buses)].copy()
 
     # Optionally copy other global tables
-    for name in ["carriers", "global_constraints"]:
-        if hasattr(grid, name):
-            setattr(new_grid, name, getattr(grid, name))
 
+    new_grid.carriers = grid.carriers
+    new_grid.global_constraints = grid.global_constraints 
 
     # drop lines with s_nom > 0.5
     if not new_grid.lines.empty:
