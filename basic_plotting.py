@@ -4,12 +4,10 @@ basic plotting
 import matplotlib.pyplot as plt
 import pypsa
 import cartopy.crs as ccrs
-import osmnx as ox
 import pandas as pd
 import polars as pl
 import geopandas as gpd
-import random
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 
 def plot_grid(grid,
               area,
@@ -73,7 +71,7 @@ def plot_step1(grid,
             zorder=5,     
             transform=ccrs.PlateCarree()
         )
-    if bool_legend == True:
+    if bool_legend:
         handles = [
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='cadetblue', markersize=10),
             plt.Line2D([0, 1], [0, 0], color='rosybrown', lw=2)
@@ -400,9 +398,9 @@ def plot_step4(grid,
     (grid.loads_t.p_set[f'{bus}_load_1'].iloc[begin:end]*1e6).plot(ax=ax, label='Load', color='green')
     # Plot of only one week
     if solar in grid.generators.index:
-        (grid.generators_t.p_max_pu[solar][begin:end]*grid.generators.at[solar, 'p_nom']*1e6).plot(ax=ax, label=f'Solar Generator', linestyle='-', color='orange')
+        (grid.generators_t.p_max_pu[solar][begin:end]*grid.generators.at[solar, 'p_nom']*1e6).plot(ax=ax, label='Solar Generator', linestyle='-', color='orange')
     if hp in grid.generators.index:
-        (grid.generators_t.p_max_pu[hp][begin:end]*grid.generators.at[hp, 'p_nom']*1e6).plot(ax=ax, label=f'Heat Pump', linestyle='-', color='blue')
+        (grid.generators_t.p_max_pu[hp][begin:end]*grid.generators.at[hp, 'p_nom']*1e6).plot(ax=ax, label='Heat Pump', linestyle='-', color='blue')
     if gridlines:
         ax.grid()
     if title is not None:
