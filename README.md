@@ -15,9 +15,6 @@ This is achieved in five steps, that can either be executed individually or subs
 - Step 4: Include weather data and generate time series for PV generation, demand and Heat Pump operation based on this. Also generate profiles for occupancy and EV availability
 - Step 5: Prepare the network for optimization with PyPSA
 
-## Documentation
-tbd
-
 ## Installation
 1. Clone the repository and navigate to its directory:
 ```bash
@@ -38,10 +35,46 @@ pip install -r requirements.txt
 Download input.zip containing weather data, zensus data and ding0 grids from zenodo: https://zenodo.org/records/17884917
 Unpack and place the folder "input" in your GridCreator repository. The subfolders "grids", "weather_2013", "zensus_daten" and the files should for example be in C:/Users/YourName/GridCreator/input
 
-## Generate your first grid
-- in main.py: add your scenario in the examples dict using the coordinates of your bounding box
-- specify the scenario name and steps you want to perform
-- run the python file main.py
+## Documentation
+Getting Started
+1.	Install the repository as described in the Installation section.
+2.	Add the input data as described in the Necessary Input Data section.
+3.	Run main.py.
+- A grid for South Berlin (line 222) is created by default.
+- You can change the scenario by selecting another predefined example (line 222).
+4.	Add your own scenario using a custom bounding box (bbox).
+- Add the bounding box with a specified name to the examples dictionary in main.py (line 173).
+- Run main.py and select the new scenario name (line 222).
+
+## Step-by-Step Grid Creation
+
+It is possible to execute the GridCreator step by step in order to manually manipulate the data.
+
+The steps to be executed can be defined in `main.py` (line 223).
+
+### Step 1 – Generate the Grid
+- Run Step 1 to generate the grid.
+- Modify or replace the generated grid before proceeding.
+
+### Step 2 – Assign OSM and Location Data
+- Run Step 2 to assign OpenStreetMap (OSM) data.
+- Additional Germany-specific location data is attached.
+
+### Step 3 – Assign GCPs and Apartments
+- Run Step 3 to assign grid connection points (GCPs) and apartments.
+- Modify `buses.csv` to create alternative scenarios:
+  - Increase number of PV systems
+  - Increase heat pump penetration
+  - Increase EV adoption
+
+### Step 4 – Add Time Series
+- Run Step 4 to add time series data to the PyPSA grid.
+- Time series can be modified directly in the PyPSA network.
+
+### Step 5 – Add Additional Components
+- Run Step 5 to add further components and parameters.
+- The grid can then be analyzed using PyPSA.
+
 
 ## References
 Frameworks used in this work:
