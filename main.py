@@ -22,7 +22,6 @@ class CreatorStep(Enum):
     ASSIGN_TECHNOLOGIES = 3
     ASSIGN_LOAD = 4
     PREPARE = 5
-    OPTIMIZE = 6
 
  #%%
 def GridCreator(top: float,
@@ -44,7 +43,6 @@ def GridCreator(top: float,
     3. Assign technologies (technik_zuordnen.py, technik_fill.py, wohnungen_zuordnen.py)
     4. Assign load profiles (loads_zuordnen.py)
     5. Prepare the grid for PyPSA (pypsa_vorbereiten.py)
-    6. Optimize the grid (.optimize())
     
     Args:
         top: Upper latitude
@@ -203,21 +201,6 @@ examples = {
     }
 }
 
-
-# %%
-# STEP 6
-# .optimize()
-
-# # Fix Capacity
-# grid_1.optimize.fix_optimal_capacities()
-
-# # Set snapshots für Optimierung
-# start_time = pd.Timestamp("2023-01-01 00:00:00")
-# end_time = pd.Timestamp("2023-01-07 23:00:00")
-# snapshots = pd.date_range(start=start_time, end=end_time, freq='h')
-# grid_1.set_snapshots(snapshots)
-
-# grid_1.optimize()
 # %%
 scenario = "South Berlin"
 steps = [1,2,3,4,5]
@@ -248,21 +231,41 @@ if __name__ == "__main__":
     
 
 # %%
+'''
+Option to create plots to visualize the results of each step for a specific scenario. The scenario can be selected via the "scenario" variable. The plots are created using the data from one specific step, which can be selected via the "step" variable. To generate all plots, at least steps 1-4 need to be executed, as the plots rely on the data generated in these steps.
+
+The plots are saved in a subfolder called "plots" within the respective scenario folder. Both .png and .pdf files are created.
+
+There are basic plots in basic_plotting.py that visualize steps 1-4, as well as OSM-specific plots in osm_plotting.py that display the network diagram on an OSM map and create an interactive map.
+
+Running the plots is optional and can be controlled via the Boolean variables "plots" and "osm_plot". Similarly, saving the plots can be controlled via "save_plots" and "save_osm_plot".
+'''
+
 import importlib
 import basic_plotting  
 importlib.reload(basic_plotting)
+import osm_plotting  
+importlib.reload(osm_plotting)
 
+scenario = "South Berlin"
+step = 'step_4'
+
+plots = True
 save_plots = True
-if save_plots:
+
+osm_plot = True
+save_osm_plot = True
+
+if plots:
     '''
     When the grid is reloaded from a .nc file, the time series are no longer available; the data frame is instead filled with NaN values.
     Plotting Step4 therefore only works if the grid is loaded from csv files.
     '''
     grid = pypsa.Network()
-    grid.import_from_csv_folder(os.path.join('output', scenario, 'step_5', 'grid'))
-    area = gpd.read_file(os.path.join('output', scenario, 'step_5', 'area.gpkg'))
-    features = gpd.read_file(os.path.join('output', scenario, 'step_5', 'features.gpkg'))
-    buses = pd.read_csv(os.path.join('output', scenario, 'step_5', 'buses.csv'), index_col=0)
+    grid.import_from_csv_folder(os.path.join('output', scenario, step, 'grid'))
+    area = gpd.read_file(os.path.join('output', scenario, step, 'area.gpkg'))
+    features = gpd.read_file(os.path.join('output', scenario, step, 'features.gpkg'))
+    buses = pd.read_csv(os.path.join('output', scenario, step, 'buses.csv'), index_col=0)
     zensus_path = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
 
     fig, ax = basic_plotting.plot_step1(grid, figsize=(10,10), legend_loc='upper left', bool_gridlinelabels=True)
@@ -289,3 +292,21 @@ if save_plots:
     if save_plots:
         fig.savefig(os.path.join('output', scenario, 'step4_ts.png'), dpi=300)
         fig.savefig(os.path.join('output', scenario, 'step4_ts.pdf'))
+
+
+
+if osm_plot:
+    grid = pypsa.Network()
+    grid.import_from_csv_folder(os.path.join('output', scenario, step, 'grid'))
+
+    fig, ax = osm_plotting.plot_network_on_osm(grid)
+    if save_osm_plot:
+        fig.savefig(os.path.join('output', scenario, 'network_osm.png'), dpi=300, bbox_inches='tight')
+        fig.savefig(os.path.join('output', scenario, 'network_osm.pdf'))
+
+    interactive = osm_plotting.plot_network_interactive(grid)
+    # To view the interactive diagram, you need to open the file via File Explorer.
+    interactive.save(os.path.join('output', scenario, 'network_interactive.html'))
+    
+
+# %%

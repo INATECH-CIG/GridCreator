@@ -15,3 +15,5 @@ shapely
 pyarrow
 cartopy
 cdsapi
+contextily
+folium
