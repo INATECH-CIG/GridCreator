@@ -101,7 +101,8 @@ def GridCreator(top: float,
             bbox_str = list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))
             bbox = [float(i) for i in bbox_str]
             # grid might also exist already
-            grid = pypsa.Network(os.path.join(output_path, 'step_1', 'grid.nc'))
+            grid = pypsa.Network()
+            grid.import_from_csv_folder(os.path.join(output_path, 'step_1', 'grid'))
 
         buses_df, area, features = mf.osm_data(grid, bbox, buffer)
         # Federal state data
@@ -113,9 +114,28 @@ def GridCreator(top: float,
 
     # STEP 3
     if 3 in steps:
+        if 1 not in steps:
+            try:
+                grid = pypsa.Network()
+                grid.import_from_csv_folder(os.path.join(output_path, 'step_2', 'grid'))
+                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_2', 'bbox.csv'), header=1))]
+                area = gpd.read_file(os.path.join(output_path, 'step_2', 'area.gpkg'))
+                features = gpd.read_file(os.path.join(output_path, 'step_2', 'features.gpkg'))
+            except:
+                try:
+                    grid = pypsa.Network()
+                    grid.import_from_csv_folder(os.path.join(output_path, 'step_1', 'grid'))
+                    bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
+                    area = gpd.read_file(os.path.join(output_path, 'step_1', 'area.gpkg'))
+                    features = gpd.read_file(os.path.join(output_path, 'step_1', 'features.gpkg'))
+                except:
+                    raise FileNotFoundError('Folder "grid" not found. Perform Step 1 first.')
         # step 2 might have been executed before, so we need to get the existing buses_df
         if 2 not in steps:
-            buses_df = pd.read_csv(os.path.join(output_path, 'step_5', 'buses.csv'), index_col=0)
+            try:
+                buses_df = pd.read_csv(os.path.join(output_path, 'step_2', 'buses.csv'), index_col=0)
+            except:
+                raise FileNotFoundError('File "buses.csv" not found. Perform Step 2 first.')
         # Define technologies
         gcp = technologies # gcp = generation and consumption plants
         # Assign technologies
@@ -134,20 +154,32 @@ def GridCreator(top: float,
         # grid might exist already, so we need to load it
         if 1 not in steps:
             try:
-                grid = pypsa.Network(os.path.join(output_path, 'step_1', 'grid.nc'))
-                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
+                grid = pypsa.Network()
+                grid.import_from_csv_folder(os.path.join(output_path, 'step_3', 'grid'))
+                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_3', 'bbox.csv'), header=1))]
+                area = gpd.read_file(os.path.join(output_path, 'step_3', 'area.gpkg'))
+                features = gpd.read_file(os.path.join(output_path, 'step_3', 'features.gpkg'))
             except:
                 try:
-                    grid = pypsa.Network(os.path.join(output_path, 'step_2', 'grid.nc'))
+                    grid = pypsa.Network()
+                    grid.import_from_csv_folder(os.path.join(output_path, 'step_2', 'grid'))
                     bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_2', 'bbox.csv'), header=1))]
+                    area = gpd.read_file(os.path.join(output_path, 'step_2', 'area.gpkg'))
+                    features = gpd.read_file(os.path.join(output_path, 'step_2', 'features.gpkg'))
                 except:
                     try:
-                        grid = pypsa.Network(os.path.join(output_path, 'step_3', 'grid.nc'))
-                        bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_3', 'bbox.csv'), header=1))]
+                        grid = pypsa.Network()
+                        grid.import_from_csv_folder(os.path.join(output_path, 'step_1', 'grid'))
+                        bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
+                        area = gpd.read_file(os.path.join(output_path, 'step_1', 'area.gpkg'))
+                        features = gpd.read_file(os.path.join(output_path, 'step_1', 'features.gpkg'))
                     except:
-                        raise FileNotFoundError('File "grid.nc" not found. Perform Step 1 first.')
+                        raise FileNotFoundError('Folder "grid" not found. Perform Step 1 first.')
         if 3 not in steps:
-            buses_df = pd.read_csv(os.path.join(output_path, 'step_3', 'buses.csv'), index_col=0)
+            try:
+                buses_df = pd.read_csv(os.path.join(output_path, 'step_3', 'buses.csv'), index_col=0)
+            except:
+                raise FileNotFoundError('File "buses.csv" not found. Perform Step 3 first.')
         
         # Add time series
         grid = mf.loads_assignment(grid, buses_df, bbox, input_path, load_method)
@@ -160,7 +192,16 @@ def GridCreator(top: float,
     if 5 in steps:
         # grid might exist already, so we need to load it
         if 4 not in steps:
-            grid = pypsa.Network(os.path.join(output_path, 'step_4', 'grid.nc'))
+            try:
+                grid = pypsa.Network()
+                grid.import_from_csv_folder(os.path.join(output_path, 'step_4', 'grid'))
+                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_4', 'bbox.csv'), header=1))]
+                area = gpd.read_file(os.path.join(output_path, 'step_4', 'area.gpkg'))
+                features = gpd.read_file(os.path.join(output_path, 'step_4', 'features.gpkg'))
+                buses_df = pd.read_csv(os.path.join(output_path, 'step_4', 'buses.csv'), index_col=0)
+            except:
+                raise FileNotFoundError('Files not found. Perform Step 4 first.')
+
             
         # Prepare grid for pysa.optimize()
         grid = mf.pypsa_preparation(grid)
@@ -248,7 +289,7 @@ import osm_plotting
 importlib.reload(osm_plotting)
 
 scenario = "South Berlin"
-step = 'step_4'
+step = 'step_5'
 
 plots = True
 save_plots = True

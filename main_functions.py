@@ -447,6 +447,10 @@ def gcp_fill(buses: pd.DataFrame, gcp: List[str], p_total: List[float], input_pa
     for gcp_1, p in zip(gcp, p_total):
         buses = func.sort_gcp(buses, gcp_1, p, solar_power)
 
+    # Determine solar capacaity based on mean solar installed capacity per postal code
+    if 'Solar_Capacity_Relative_Anteil' in pv_plz.columns:
+        buses = func.solar_capacity(buses, unique_plz, pv_plz)
+
     # Determine solar orientation (e.g., south, east, west)
     buses = func.solar_orientation(buses, unique_plz, pv_plz)
 
