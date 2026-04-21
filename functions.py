@@ -572,6 +572,68 @@ def sort_gcp(buses: pd.DataFrame, gcp: str, amount_total: float, solar_power: pd
     return buses
 
 
+def solar_capacity(buses: pd.DataFrame, plz: str, pv_plz: pd.DataFrame) -> pd.DataFrame:
+    """
+    Assigns solar capacity to buses with solar technology based on postal code (PLZ) statistics.
+
+    Args:
+        buses (pd.DataFrame):
+            DataFrame containing bus data, including the column 'Power_solar'.
+        plz (str):
+            The postal code for which the solar capacity should be applied.
+        pv_plz (pd.DataFrame):
+            DataFrame containing PLZ-level PV installation data with columns:
+            - 'Solar_Capacity_Relative_Anteil': dict-like string of relative distribution of solar capacity classes (e.g. {"<=0.5": 0.2, "0.5-0.8": 0.5, "0.8-1.2": 0.3})
+
+    Returns:
+        pd.DataFrame:
+            Updated DataFrame with assigned solar capacity for solar-equipped buses based on PLZ-level statistics.
+    """
+    # Filter buses with solar installations
+    buses = buses.copy()
+    solar_buses = buses[buses["Power_solar"] != 0].copy()
+
+    # Assign solar capacity for each solar bus based on postal code distribution
+    for bus in solar_buses.index:
+        # Get postal code for the bus
+        plz_bus = buses.loc[bus, "plz_code"]
+
+        # Extract relative distribution for solar capacity classes for the bus's PLZ
+        rel_dist_raw = pv_plz.loc[
+            plz_bus,
+            "Solar_Capacity_Relative_Anteil"
+        ]
+        # Convert the string representation of the dictionary to an actual dictionary
+        rel_dist = ast.literal_eval(rel_dist_raw)
+
+        # Randomly choose a capacity class based on the relative distribution
+        classes = list(rel_dist.keys())
+        probs = np.array(list(rel_dist.values()))
+        probs = probs / probs.sum()  # Normalize to ensure probabilities sum to 1
+
+        # Randomly select a class based on the probabilities
+        chosen_class = np.random.choice(classes, p=probs)
+
+        # Get mean installed solar capacity for the bus's PLZ
+        mean_capacity = buses.loc[bus, "Power_solar"]
+
+        # Assign a random factor within the range of the chosen class to determine the actual solar capacity for the bus
+        if chosen_class == "<=0.5":
+            factor = np.random.uniform(0.2, 0.5)
+        elif chosen_class == "0.5-0.8":
+            factor = np.random.uniform(0.5, 0.8)
+        elif chosen_class == "0.8-1.2":
+            factor = np.random.uniform(0.8, 1.2)
+        elif chosen_class == "1.2-1.5":
+            factor = np.random.uniform(1.2, 1.5)
+        else:  # ">1.5"
+            factor = np.random.uniform(1.5, 2.0)
+
+        buses.at[bus, "Power_solar"] = mean_capacity * factor
+
+    return buses
+
+
 def solar_orientation(buses: pd.DataFrame, plz: str, pv_plz: pd.DataFrame) -> pd.DataFrame:
     """
     Assigns orientation and tilt angles to buses with solar technology based on postal code (PLZ) statistics.
