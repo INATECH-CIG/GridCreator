@@ -231,7 +231,7 @@ def appartments_assignment(buses: pd.DataFrame) -> pd.DataFrame:
     buses['Bus_5_Personen'] = 0
     buses['Bus_6_Personen_und_mehr'] = 0
     buses['Haushalte'] = 0
-    buses['Bewohnerinnen'] = 0
+    buses['Bewohnerinnen'] = 0.0
 
     # Fill missing values and replace special dash characters
     buses = buses.fillna(0)
