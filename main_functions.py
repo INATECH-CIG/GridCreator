@@ -462,7 +462,7 @@ def gcp_fill(buses: pd.DataFrame, gcp: List[str], p_total: List[float], input_pa
 
 
 
-def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], input_path: str, method: int, env=None):
+def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float], input_path: str, method: int, number_of_profiles: int, env=None):
     """
     Assigns loads to the grid based on the bus data and environmental conditions.
     
@@ -537,7 +537,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             power_df = pd.DataFrame(index=snapshots)
             occupants_dict[persons] = {}
 
-            for profile_number in range(1, 11):
+            for profile_number in range(1, number_of_profiles + 1):
                 power_series, occupancy_series = demand_load.create_appartment(people=persons, index=snapshots, env=environment)
                 power_df[f"profile_{profile_number}"] = power_series
                 occupants_dict[persons][f"profile_{profile_number}"] = occupancy_series
@@ -739,7 +739,8 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             grid.add("Generator", name=bus + "_HP", bus=bus, p_nom = power_max)
 
             # Store the generated time series for later concatenation
-            hp_cols[bus + "_HP"] = power.values/power_max
+            # Change sign to negative for heat pumps, as they consume electricity
+            hp_cols[bus + "_HP"] = -1*power.values/power_max
 
         # Append all generated heat pump profiles to PyPSA time series data
         if hp_cols:

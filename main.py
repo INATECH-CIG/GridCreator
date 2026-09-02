@@ -32,6 +32,7 @@ def GridCreator(top: float,
                 steps: list[CreatorStep]=[1,2,3,4,5],
                 technologies=['solar', 'E_car', 'HP'],
                 load_method: int = 0,
+                number_of_profiles: int = 10,
                 buses_df = pd.DataFrame(),
                 grid = pypsa.Network()) -> tuple:
     '''
@@ -52,8 +53,9 @@ def GridCreator(top: float,
         scenario: Name of the scenario
         steps: List of CreatorSteps to execute (1-5)
         technologies: List of technologies to consider (e.g., ['solar', 'E_car', 'HP'])
-        load_method: Method for load profile generation (0: Creation of 10 individual profiles for each household type, random assignment of profiles to each household type
+        load_method: Method for load profile generation (0: Creation of a number of individual profiles for each household type, random assignment of profiles to each household type
                                                          1: Creation of individual profiles for each household)
+        number_of_profiles: Number of individual load profiles to generate for each household type for load_method=0 (default is 10)
         buses_df: DataFrame containing buses and related data (optional, default is empty DataFrame)
                   Ability to provide pre-populated buses_df to skip step 2 or manipulated data after executing step 2
         
@@ -183,7 +185,7 @@ def GridCreator(top: float,
                 raise FileNotFoundError('File "buses.csv" not found. Perform Step 3 first.')
         
         # Add time series
-        grid = mf.loads_assignment(grid, buses_df, bbox, input_path, load_method)
+        grid = mf.loads_assignment(grid, buses_df, bbox, input_path, load_method, number_of_profiles)
 
         # Return if Step 4 is the last selected step
         if steps[-1] == CreatorStep.ASSIGN_LOAD:
