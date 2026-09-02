@@ -500,12 +500,15 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     load_cols = {}
     # Identify buses with electric vehicles
     # Expand list according to number of EVs per bus
-    e_car_buses = [
-    bus
-    for bus, row in buses.iterrows()
-    if row["Factor_E_car"] > 0 and row["Power_E_car"] > 0  # Nur wenn Faktor > 0
-    for _ in range(int(row["Power_E_car"] // row["Factor_E_car"]))
-    ]
+    if "Power_E_car" in buses.columns:
+        e_car_buses = [
+        bus
+        for bus, row in buses.iterrows()
+        if row["Factor_E_car"] > 0 and row["Power_E_car"] > 0  # Nur wenn Faktor > 0
+        for _ in range(int(row["Power_E_car"] // row["Factor_E_car"]))
+        ]
+    else:
+        e_car_buses = []
 
     e_car_charging = {}
     e_car_driving = {}
@@ -534,7 +537,7 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
             power_df = pd.DataFrame(index=snapshots)
             occupants_dict[persons] = {}
 
-            for profile_number in range(1, 3):
+            for profile_number in range(1, 11):
                 power_series, occupancy_series = demand_load.create_appartment(people=persons, index=snapshots, env=environment)
                 power_df[f"profile_{profile_number}"] = power_series
                 occupants_dict[persons][f"profile_{profile_number}"] = occupancy_series
@@ -581,40 +584,37 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
         load_cols[f"{bus}_load_{call_counter}"] = power
         remaining_residents -= persons
 
-
-        '''
-        Secto coupling besipeil solar
-        primär und ened energie carrier
-        '''
-
         # If the bus has electric vehicles, create an EV storage unit
         if bus in e_car_buses:
             load_driving, charging_power, charging = demand_load.create_e_car(occ = occupants, index=snapshots)
 
+            # count number of e_cars assigned to this bus
+            e_car_count = sum(1 for b in e_car_buses if b == bus)
+
             # Create EV and connectors
             # Add a separate bus for the EV
-            grid.add("Bus", f"{bus}_E_Car",
+            grid.add("Bus", f"{bus}_E_Car_{e_car_count}",
                      x=grid.buses.at[bus, 'x'],# + 0.0001,
                      y=grid.buses.at[bus, 'y']# + 0.0001
                     )
             # Add connectors for charging and discharging
-            grid.add("Link", f"{bus}_E_Car_Connector_charge", bus0=bus, bus1=f"{bus}_E_Car",
+            grid.add("Link", f"{bus}_E_Car_Connector_charge_{e_car_count}", bus0=bus, bus1=f"{bus}_E_Car_{e_car_count}",
                      p_nom=charging_power,
                      efficiency=0.95)
-            e_car_charging[f"{bus}_E_Car_Connector_charge"] = charging
-            grid.add("Link", f"{bus}_E_Car_Connector_discharge", bus0=f"{bus}_E_Car", bus1=bus,
+            e_car_charging[f"{bus}_E_Car_Connector_charge_{e_car_count}"] = charging
+            grid.add("Link", f"{bus}_E_Car_Connector_discharge_{e_car_count}", bus0=f"{bus}_E_Car_{e_car_count}", bus1=bus,
                      p_nom=charging_power,
                      efficiency=0.95)
-            e_car_charging[f"{bus}_E_Car_Connector_discharge"] = charging
+            e_car_charging[f"{bus}_E_Car_Connector_discharge_{e_car_count}"] = charging
 
             # Add load for driving consumption
-            grid.add("Load", f"{bus}_E_Car_Load", bus=f"{bus}_E_Car")
-            e_car_driving[f"{bus}_E_Car_Load"] = load_driving
+            grid.add("Load", f"{bus}_E_Car_Load_{e_car_count}", bus=f"{bus}_E_Car_{e_car_count}")
+            e_car_driving[f"{bus}_E_Car_Load_{e_car_count}"] = load_driving
 
             # Add storage for the EV battery
             battery_max = 77*1e-3 # MWh https://www.enbw.com/blog/elektromobilitaet/laden/wie-gross-muss-die-batterie-fuer-mein-elektroauto-sein/
-            grid.add("Store", f"{bus}_E_Car_Storage",
-                bus=f"{bus}_E_Car",
+            grid.add("Store", f"{bus}_E_Car_Storage_{e_car_count}",
+                bus=f"{bus}_E_Car_{e_car_count}",
                 e_nom=battery_max,
                 e_initial=battery_max,                
                 e_cyclic=False,
@@ -658,90 +658,93 @@ def loads_assignment(grid: pypsa.Network, buses: pd.DataFrame, bbox: List[float]
     grid.links_t.p_max_pu = pd.concat([grid.links_t.p_max_pu, pd.DataFrame(e_car_charging)], axis=1)
 
 
-    # Assign solar generators based on bus data
-    # Remove all existing solar generators before adding new ones.
-    grid.generators.drop(grid.generators.index[grid.generators['type'] == 'solar'], inplace=True)
+    if 'Power_solar' in buses.columns:
+        # Assign solar generators based on bus data
+        # Remove all existing solar generators before adding new ones.
+        grid.generators.drop(grid.generators.index[grid.generators['type'] == 'solar'], inplace=True)
 
-    # Select all buses that have solar capacity
-    solar_buses = buses.index[buses["Power_solar"] != 0]
+        # Select all buses that have solar capacity
+        solar_buses = buses.index[buses["Power_solar"] != 0]
 
-    # Ensure a minimum solar capacity of 0.25 kW
-    for bus in solar_buses:
-        # print('Power_solar: ', buses.loc[bus, 'Power_solar'])
-        if buses.loc[bus, 'Power_solar'] < 0.25:  # Minimum 0.25 kW
-            # print('Power_solar is less than 0.25, setting to 0.25')
-            buses.loc[bus, 'Power_solar'] = 0.25
+        # Ensure a minimum solar capacity of 0.25 kW
+        for bus in solar_buses:
+            # print('Power_solar: ', buses.loc[bus, 'Power_solar'])
+            if buses.loc[bus, 'Power_solar'] < 0.25:  # Minimum 0.25 kW
+                # print('Power_solar is less than 0.25, setting to 0.25')
+                buses.loc[bus, 'Power_solar'] = 0.25
 
-    solar_cols = {}
+        solar_cols = {}
 
-    for bus in solar_buses:
-        existing = grid.generators[(grid.generators['bus'] == bus)]
+        for bus in solar_buses:
+            existing = grid.generators[(grid.generators['bus'] == bus)]
 
-        beta = buses.loc[bus, 'HauptausrichtungNeigungswinkel_Anteil']
-        gamma = buses.loc[bus, 'Hauptausrichtung_Anteil']
+            beta = buses.loc[bus, 'HauptausrichtungNeigungswinkel_Anteil']
+            gamma = buses.loc[bus, 'Hauptausrichtung_Anteil']
 
 
-        # For east-west systems, split capacity into two PV systems
-        if gamma == 'Ost-West':
-            gamma_1 = 'Ost'
-            gamma_2 = 'West'
-            power_1 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_1, index=snapshots, env=environment)
-            power_2 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_2, index=snapshots, env=environment)
-            power = power_1 + power_2
+            # For east-west systems, split capacity into two PV systems
+            if gamma == 'Ost-West':
+                gamma_1 = 'Ost'
+                gamma_2 = 'West'
+                power_1 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_1, index=snapshots, env=environment)
+                power_2 = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar']*0.5, beta=beta, gamma=gamma_2, index=snapshots, env=environment)
+                power = power_1 + power_2
 
-        else:
-            # Create standard PV generation profile
-            power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
-        
-        if existing.empty:
-            # Add generator if it doesn’t exist yet
-
-            # Maximum power
-            power_max= max(power)
+            else:
+                # Create standard PV generation profile
+                power = demand_load.create_pv(peakpower=buses.loc[bus, 'Power_solar'], beta=beta, gamma=gamma, index=snapshots, env=environment)
             
-            grid.add("Generator", name=bus + "_solar", bus=bus, carrier="solar", p_nom=power_max)
-            # Normalise power profile to per unit values
-            solar_cols[bus + "_solar"] = power.values/power_max
+            if existing.empty:
+                # Add generator if it doesn’t exist yet
 
-        else:
-            # If already exists, just update its time series
-            # Maximum power
-            power_max= max(power)
-            solar_cols[bus + "_solar"] = power.values/power_max
+                # Maximum power
+                power_max= max(power)
+                
+                grid.add("Generator", name=bus + "_solar", bus=bus, carrier="solar", p_nom=power_max)
+                # Normalise power profile to per unit values
+                solar_cols[bus + "_solar"] = power.values/power_max
 
-        if buses.loc[bus, 'storage'] > 0:
-            # Add StorageUnit for solar storage
-            storage_capacity = buses.loc[bus, 'storage']  # in kWh
-            grid.add("StorageUnit", name=bus + "_solar_storage", bus=bus, p_nom=storage_capacity)
+            else:
+                # If already exists, just update its time series
+                # Maximum power
+                power_max= max(power)
+                solar_cols[bus + "_solar"] = power.values/power_max
+
+            if buses.loc[bus, 'storage'] > 0:
+                # Add StorageUnit for solar storage
+                storage_capacity = buses.loc[bus, 'storage']  # in kWh
+                # Change storage capacity to MWh for PyPSA
+                storage_capacity_mwh = storage_capacity / 1000.0
+                grid.add("StorageUnit", name=bus + "_solar_storage", bus=bus, p_nom=storage_capacity_mwh)
 
 
-    # Append all generated PV profiles to PyPSA time series data
-    if solar_cols:
-        grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
-        # Solar can be shut down: minimum power is zero and nor equal to maximum power
-        # grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
+        # Append all generated PV profiles to PyPSA time series data
+        if solar_cols:
+            grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
+            # Solar can be shut down: minimum power is zero and nor equal to maximum power
+            # grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(solar_cols, index=snapshots)], axis=1)
 
+    if 'Power_HP' in buses.columns:
+        # Select all buses that have non-zero heat pump capacity
+        HP_buses = buses.index[buses["Power_HP"] != 0]
+        hp_cols = {}
 
-    # Select all buses that have non-zero heat pump capacity
-    HP_buses = buses.index[buses["Power_HP"] != 0]
-    hp_cols = {}
+        for bus in HP_buses:
+            # Create heat pump power time series
+            power = demand_load.create_hp(index=snapshots, env=environment)
 
-    for bus in HP_buses:
-        # Create heat pump power time series
-        power = demand_load.create_hp(index=snapshots, env=environment)
+            power_max = max(power)
 
-        power_max = max(power)
+            # Add heat pump generator to the grid
+            grid.add("Generator", name=bus + "_HP", bus=bus, p_nom = power_max)
 
-        # Add heat pump generator to the grid
-        grid.add("Generator", name=bus + "_HP", bus=bus, p_nom = power_max)
+            # Store the generated time series for later concatenation
+            hp_cols[bus + "_HP"] = power.values/power_max
 
-        # Store the generated time series for later concatenation
-        hp_cols[bus + "_HP"] = power.values/power_max
-
-    # Append all generated heat pump profiles to PyPSA time series data
-    if hp_cols:
-        grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
-        grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
+        # Append all generated heat pump profiles to PyPSA time series data
+        if hp_cols:
+            grid.generators_t.p_max_pu = pd.concat([grid.generators_t.p_max_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
+            grid.generators_t.p_min_pu = pd.concat([grid.generators_t.p_min_pu, pd.DataFrame(hp_cols, index=snapshots)], axis=1)
 
 
     # # Add commercial (Gewerbe) loads based on OSM data

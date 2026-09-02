@@ -8,14 +8,14 @@ import geopandas as gpd
 import pandas as pd
 
 import pypsa
-from enum import Enum
+from enum import IntEnum
 
 '''
 Main module for the GridCreator tool.
 Handles the overall workflow including data preparation, grid creation, technology assignment, load profile generation.
 '''
 
-class CreatorStep(Enum):
+class CreatorStep(IntEnum):
     SAVE_INPUT = 0
     CREATE_GRID = 1
     LOAD_OSM = 2
@@ -49,6 +49,7 @@ def GridCreator(top: float,
         bottom: Lower latitude
         left: Left longitude
         right: Right longitude
+        scenario: Name of the scenario
         steps: List of CreatorSteps to execute (1-5)
         technologies: List of technologies to consider (e.g., ['solar', 'E_car', 'HP'])
         load_method: Method for load profile generation (0: Creation of 10 individual profiles for each household type, random assignment of profiles to each household type
@@ -77,25 +78,25 @@ def GridCreator(top: float,
     features = gpd.GeoDataFrame()
 
     # STEP 1
-    if 1 in steps:        
+    if CreatorStep.CREATE_GRID in steps:        
         #Grid creation
         grid, bbox = mf.ding0_grid(bbox, input_path)
         grid.name = scenario
         # Check if pypsa network is empty
         if grid.buses.empty:
-            print("Das erzeugte Netz ist leer. Bitte überprüfen Sie die Eingabekoordinaten.")
+            print("The generated mesh is empty. Please check the input coordinates.")
             return grid, buses_df, bbox, area, features
         
         # Return if only Step 1 is selected
-        if steps[-1] == 1:
+        if steps[-1] == CreatorStep.CREATE_GRID:
             return grid, buses_df, bbox, area, features
 
     # STEP 2
-    if 2 in steps:
+    if CreatorStep.LOAD_OSM in steps:
         # Load data
         # OSM data
         buffer = 0.0002  # corresponds to approximately 20 m
-        if 1 not in steps:
+        if CreatorStep.CREATE_GRID not in steps:
             # step 1 might have been executed before, so we need to get the adjusted bbox
             # bbox = [left, bottom, right, top]
             bbox_str = list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))
@@ -109,12 +110,12 @@ def GridCreator(top: float,
         buses_df = mf.data_assignment(buses_df, input_path)
 
         # Return if Step 2 is the last selected step
-        if steps[-1] == 2:    
+        if steps[-1] == CreatorStep.LOAD_OSM:    
             return grid, buses_df, bbox, area, features
 
     # STEP 3
-    if 3 in steps:
-        if 1 not in steps:
+    if CreatorStep.ASSIGN_TECHNOLOGIES in steps:
+        if CreatorStep.CREATE_GRID not in steps:
             try:
                 grid = pypsa.Network()
                 grid.import_from_csv_folder(os.path.join(output_path, 'step_2', 'grid'))
@@ -131,7 +132,7 @@ def GridCreator(top: float,
                 except:
                     raise FileNotFoundError('Folder "grid" not found. Perform Step 1 first.')
         # step 2 might have been executed before, so we need to get the existing buses_df
-        if 2 not in steps:
+        if CreatorStep.LOAD_OSM not in steps:
             try:
                 buses_df = pd.read_csv(os.path.join(output_path, 'step_2', 'buses.csv'), index_col=0)
             except:
@@ -145,14 +146,14 @@ def GridCreator(top: float,
         buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, input_path)
 
         # Return if Step 3 is the last selected step
-        if steps[-1] == 3:
+        if steps[-1] == CreatorStep.ASSIGN_TECHNOLOGIES:
             return grid, buses_df, bbox, area, features
         
     
     # STEP 4
-    if 4 in steps:
+    if CreatorStep.ASSIGN_LOAD in steps:
         # grid might exist already, so we need to load it
-        if 1 not in steps:
+        if CreatorStep.CREATE_GRID not in steps:
             try:
                 grid = pypsa.Network()
                 grid.import_from_csv_folder(os.path.join(output_path, 'step_3', 'grid'))
@@ -175,7 +176,7 @@ def GridCreator(top: float,
                         features = gpd.read_file(os.path.join(output_path, 'step_1', 'features.gpkg'))
                     except:
                         raise FileNotFoundError('Folder "grid" not found. Perform Step 1 first.')
-        if 3 not in steps:
+        if CreatorStep.ASSIGN_TECHNOLOGIES not in steps:
             try:
                 buses_df = pd.read_csv(os.path.join(output_path, 'step_3', 'buses.csv'), index_col=0)
             except:
@@ -185,13 +186,13 @@ def GridCreator(top: float,
         grid = mf.loads_assignment(grid, buses_df, bbox, input_path, load_method)
 
         # Return if Step 4 is the last selected step
-        if steps[-1] == 4:
+        if steps[-1] == CreatorStep.ASSIGN_LOAD:
             return grid, buses_df, bbox, area, features
 
     # STEP 5
-    if 5 in steps:
+    if CreatorStep.PREPARE in steps:
         # grid might exist already, so we need to load it
-        if 4 not in steps:
+        if CreatorStep.ASSIGN_LOAD not in steps:
             try:
                 grid = pypsa.Network()
                 grid.import_from_csv_folder(os.path.join(output_path, 'step_4', 'grid'))
@@ -243,7 +244,7 @@ examples = {
 }
 
 # %%
-scenario = "South Berlin"
+scenario = "Schallstadt_small"
 steps = [1,2,3,4,5]
 
 if __name__ == "__main__":
