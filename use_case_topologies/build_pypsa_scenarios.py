@@ -1,0 +1,473 @@
+"""Build the full SimBench LV penetration/placement experiment as PyPSA grids.
+
+This script is intentionally not executed on import. Run it from the
+GridCreator repository after generating non-null household Parquet profiles.
+
+GridCreator functionality reused here:
+* functions.env_weather for the common 2013 weather environment;
+* creating_demand_and_load.create_pv for PV profiles;
+* creating_demand_and_load.create_hp for the heat-demand proxy;
+* creating_demand_and_load.create_e_car for EV availability and trip energy.
+
+GridCreator.main_functions.loads_assignment is not used because it would draw
+new stochastic households for each network. pypsa_preparation is not used
+because it replaces the SimBench line impedances and ratings, which are the
+topological quantities under study.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import sys
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pypsa
+
+REPOSITORY = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPOSITORY))
+
+import creating_demand_and_load as gc_profiles
+import functions as gc_functions
+from scenario_assignment import (
+    AssignmentDesign,
+    PLACEMENTS,
+    QUOTAS,
+    build_topology_assignments,
+    load_topology,
+)
+
+DEFAULT_PROFILE_DB = (
+    REPOSITORY / "use_case_topologies" / "household_profile_database_2013"
+)
+DEFAULT_OUTPUT = REPOSITORY / "use_case_topologies" / "pypsa_scenarios"
+
+
+@dataclass(frozen=True)
+class ProsumerSpec:
+    pv_kw: float
+    pv_orientation: str
+    pv_tilt_deg: float
+    ev_charger_kw: float
+    ev_battery_kwh: float
+    heat_pump_kw: float
+    battery_power_kw: float
+    battery_capacity_kwh: float
+    heat_pump_cop: float = 3.0
+
+
+class OccupancyAdapter:
+    """Give stored occupancy arrays GridCreator's create_e_car interface."""
+
+    def __init__(self, values: pd.Series):
+        self._values = values.to_numpy(dtype=float)
+
+    def get_occ_profile_in_curr_timestep(self) -> np.ndarray:
+        return self._values
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    # Topologies are supplied locally; require their path rather than a machine-specific default.
+    parser.add_argument(
+        "--topology-root",
+        type=Path,
+        required=True,
+        help="Path to one PyPSA topology CSV folder or a directory containing topology folders.",
+    )
+    parser.add_argument("--profile-db", type=Path, default=DEFAULT_PROFILE_DB)
+    parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--gridcreator-input", type=Path, default=REPOSITORY / "input")
+    parser.add_argument("--household-seed", type=int, default=21051991)
+    parser.add_argument("--mapping-seed", type=int, default=17071993)
+    parser.add_argument("--random-seed-1", type=int, default=101)
+    parser.add_argument("--random-seed-2", type=int, default=202)
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing scenario output directory.",
+    )
+    return parser.parse_args()
+
+
+def read_profile_table(path: Path) -> pd.DataFrame:
+    table = pd.read_parquet(path)
+    if "timestamp" in table.columns:
+        table = table.set_index("timestamp")
+    table.index = pd.DatetimeIndex(table.index).tz_localize(None)
+    if not table.index.is_monotonic_increasing or table.index.has_duplicates:
+        raise ValueError(f"Invalid time index in {path}")
+    return table
+
+
+def require_profiles(table: pd.DataFrame, profile_ids: list[str], label: str) -> None:
+    missing_columns = sorted(set(profile_ids) - set(table.columns))
+    if missing_columns:
+        raise ValueError(f"{label}: missing profile columns: {missing_columns}")
+    null_profiles = table[profile_ids].columns[table[profile_ids].isna().any()].tolist()
+    if null_profiles:
+        raise ValueError(
+            f"{label}: profiles still contain null placeholders; run household "
+            f"generation first. First affected profiles: {null_profiles[:10]}"
+        )
+
+
+def _one_active_value(table: pd.DataFrame, flag: str, field: str) -> float:
+    values = pd.to_numeric(
+        table.loc[table[flag].astype(int) == 1, field], errors="raise"
+    )
+    values = sorted(values[values > 0].unique())
+    if len(values) != 1:
+        raise ValueError(f"Expected one positive {field} value, found {values}")
+    return float(values[0])
+
+
+def read_prosumer_spec(path: Path) -> ProsumerSpec:
+    technology = pd.read_csv(path, sep=";")
+    pv_rows = technology.loc[technology["has_pv"].astype(int) == 1]
+    orientations = sorted(pv_rows["pv_orientation"].dropna().str.lower().unique())
+    tilts = sorted(pd.to_numeric(pv_rows["pv_tilt_deg"], errors="raise").unique())
+    if len(orientations) != 1 or len(tilts) != 1:
+        raise ValueError("Full-prosumer PV orientation and tilt must each be constant")
+    return ProsumerSpec(
+        pv_kw=_one_active_value(technology, "has_pv", "pv_p_nom_kw"),
+        pv_orientation=orientations[0],
+        pv_tilt_deg=float(tilts[0]),
+        ev_charger_kw=_one_active_value(technology, "has_ev", "ev_charger_kw"),
+        ev_battery_kwh=_one_active_value(technology, "has_ev", "ev_battery_kwh"),
+        heat_pump_kw=_one_active_value(
+            technology, "has_heat_pump", "heat_pump_p_nom_kw"
+        ),
+        battery_power_kw=_one_active_value(
+            technology, "has_stationary_battery", "battery_power_kw"
+        ),
+        battery_capacity_kwh=_one_active_value(
+            technology, "has_stationary_battery", "battery_capacity_kwh"
+        ),
+    )
+
+
+def gridcreator_orientation(label: str) -> str:
+    mapping = {
+        "south": "Süd",
+        "süd": "Süd",
+        "southeast": "Süd-Ost",
+        "southwest": "Süd-West",
+        "east": "Ost",
+        "west": "West",
+        "north": "Nord",
+    }
+    try:
+        return mapping[label.lower()]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported PV orientation: {label}") from exc
+
+
+def common_gridcreator_profiles(
+    index: pd.DatetimeIndex,
+    profile_config: dict,
+    input_path: Path,
+    spec: ProsumerSpec,
+):
+    step_seconds = int((index[1] - index[0]).total_seconds())
+    environment = gc_functions.env_weather(
+        bbox=list(profile_config["bbox"].values()),
+        input_path=str(input_path),
+        time_discretization=step_seconds,
+        timesteps_horizon=len(index),
+        timesteps_used_horizon=len(index),
+        timesteps_total=len(index),
+    )
+
+    raw_pv = gc_profiles.create_pv(
+        env=environment,
+        peakpower=spec.pv_kw,
+        index=index,
+        beta=spec.pv_tilt_deg,
+        gamma=gridcreator_orientation(spec.pv_orientation),
+    ).clip(lower=0.0)
+    if raw_pv.max() <= 0:
+        raise ValueError("GridCreator returned an empty PV profile")
+    # normalize raw pv (weather) with max and PV-plants nominal power
+    pv_mw = raw_pv / raw_pv.max() * (spec.pv_kw / 1000.0)
+
+    raw_hp_mw = gc_profiles.create_hp(index=index, env=environment).clip(lower=0.0)
+    if raw_hp_mw.max() <= 0:
+        raise ValueError("GridCreator returned an empty heat-pump profile")
+    hp_electric_mw = raw_hp_mw / raw_hp_mw.max() * (spec.heat_pump_kw / 1000.0)
+    heat_demand_kw = hp_electric_mw * 1000.0 * spec.heat_pump_cop
+    return environment, pv_mw, heat_demand_kw
+
+
+def add_carrier(network: pypsa.Network, name: str) -> None:
+    if name not in network.carriers.index:
+        network.add("Carrier", name)
+
+
+def add_slack(network: pypsa.Network) -> None:
+    if (network.generators.get("control", pd.Series(dtype=str)) == "Slack").any():
+        return
+    mv_bus = str(network.transformers.iloc[0]["bus0"])
+    add_carrier(network, "grid_connection")
+    network.add(
+        "Generator",
+        "upstream_grid",
+        bus=mv_bus,
+        carrier="grid_connection",
+        control="Slack",
+        p_nom=1e3,
+    )
+
+
+def ev_requests(
+    profile_id: str,
+    bus: str,
+    occupancy: pd.Series,
+    spec: ProsumerSpec,
+) -> pd.DataFrame:
+    """Convert GridCreator availability into reproducible GrECCo requests."""
+    trip_mw, _, at_home = gc_profiles.create_e_car(
+        occ=OccupancyAdapter(occupancy), index=occupancy.index
+    )
+    at_home = at_home.astype(bool)
+    departures = np.flatnonzero(at_home.shift(fill_value=True) & ~at_home)
+    arrivals = np.flatnonzero(~at_home.shift(fill_value=True) & at_home)
+    rows = []
+    for departure in departures:
+        later_arrivals = arrivals[arrivals > departure]
+        if len(later_arrivals) == 0:
+            continue
+        arrival = int(later_arrivals[0])
+        next_departures = departures[departures > arrival]
+        deadline = int(next_departures[0]) if len(next_departures) else len(at_home) - 1
+        step_hours = (occupancy.index[1] - occupancy.index[0]).total_seconds() / 3600
+        trip_kwh = float(trip_mw.iloc[departure:arrival].sum() * step_hours * 1000)
+        start_soc = max(0.0, 1.0 - trip_kwh / spec.ev_battery_kwh)
+        rows.append(
+            {
+                "EVID": f"ev_{profile_id}",
+                "Bus": bus,
+                "ChargerID": f"ev_{profile_id}",
+                "Start_Time": occupancy.index[arrival],
+                "End_Time": occupancy.index[deadline],
+                "StartSOC": start_soc,
+                "TargetSOC": 1.0,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def add_households_and_prosumers(
+    network: pypsa.Network,
+    assignment: pd.DataFrame,
+    demand: pd.DataFrame,
+    occupancy: pd.DataFrame,
+    pv_mw: pd.Series,
+    heat_demand_kw: pd.Series,
+    spec: ProsumerSpec,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    network.set_snapshots(demand.index)
+    for carrier in ("baseload", "solar", "heat_pump", "battery", "ev"):
+        add_carrier(network, carrier)
+    add_slack(network)
+
+    baseload_series = {}
+    pv_series = {}
+    heat_columns = {}
+    request_frames = []
+
+    for row in assignment.itertuples(index=False):
+        bus = str(row.bus)
+        profile_id = str(row.profile_id)
+        load_name = f"baseload_at_{bus}"
+        network.add("Load", load_name, bus=bus, carrier="baseload", p_set=0.0)
+        baseload_series[load_name] = demand[profile_id]
+
+        if not bool(row.full_prosumer):
+            continue
+
+        pv_name = f"pv_at_{bus}"
+        network.add(
+            "Generator",
+            pv_name,
+            bus=bus,
+            carrier="solar",
+            control="PQ",
+            p_nom=spec.pv_kw / 1000.0,
+        )
+        pv_series[pv_name] = pv_mw
+
+        network.add(
+            "Load",
+            f"heat_pump_at_{bus}",
+            bus=bus,
+            carrier="heat_pump",
+            p_set=spec.heat_pump_kw / 1000.0,
+        )
+        heat_columns[bus] = heat_demand_kw
+
+        network.add(
+            "StorageUnit",
+            f"battery_at_{bus}",
+            bus=bus,
+            type="h0_battery",
+            carrier="battery",
+            p_nom=spec.battery_power_kw / 1000.0,
+            max_hours=spec.battery_capacity_kwh / spec.battery_power_kw,
+            efficiency_store=0.95,
+            efficiency_dispatch=0.95,
+            cyclic_state_of_charge=True,
+        )
+        network.storage_units.loc[f"battery_at_{bus}", "capacity"] = (
+            spec.battery_capacity_kwh
+        )
+        network.add(
+            "StorageUnit",
+            f"ev_{profile_id}",
+            bus=bus,
+            type="ev_charger",
+            carrier="ev",
+            p_nom=spec.ev_charger_kw / 1000.0,
+            max_hours=spec.ev_battery_kwh / spec.ev_charger_kw,
+            efficiency_store=0.95,
+            efficiency_dispatch=0.95,
+        )
+        network.storage_units.loc[f"ev_{profile_id}", "capacity"] = spec.ev_battery_kwh
+        request_frames.append(ev_requests(profile_id, bus, occupancy[profile_id], spec))
+
+    network.loads_t.p_set = pd.DataFrame(baseload_series, index=demand.index)
+    network.generators_t.p_set = pd.DataFrame(pv_series, index=demand.index)
+    heat_demand = pd.DataFrame(heat_columns, index=demand.index)
+    requests = (
+        pd.concat(request_frames, ignore_index=True)
+        if request_frames
+        else pd.DataFrame(
+            columns=[
+                "EVID",
+                "Bus",
+                "ChargerID",
+                "Start_Time",
+                "End_Time",
+                "StartSOC",
+                "TargetSOC",
+            ]
+        )
+    )
+    return heat_demand, requests
+
+
+def scenario_name(quota: float, placement: str) -> str:
+    return f"q{int(round(quota * 100)):03d}_{placement}"
+
+
+def prepare_output(path: Path, overwrite: bool) -> None:
+    if path.exists():
+        if not overwrite:
+            raise FileExistsError(
+                f"Output exists: {path}; pass --overwrite to replace it"
+            )
+        shutil.rmtree(path)
+    path.mkdir(parents=True)
+
+
+def find_topology_paths(topology_root: Path) -> list[Path]:
+    if (topology_root / "buses.csv").is_file():
+        return [topology_root]
+    return sorted(path for path in topology_root.iterdir() if path.is_dir())
+
+
+def main() -> None:
+    args = parse_args()
+    metadata = pd.read_csv(args.profile_db / "household_metadata.csv")
+    profile_ids = metadata["profile_id"].astype(str).tolist()
+    demand = read_profile_table(args.profile_db / "household_timeseries.parquet")
+    occupancy = read_profile_table(args.profile_db / "occupancy_timeseries.parquet")
+    require_profiles(demand, profile_ids, "household demand")
+    require_profiles(occupancy, profile_ids, "occupancy")
+    if not demand.index.equals(occupancy.index):
+        raise ValueError("Demand and occupancy timestamps differ")
+
+    with (args.profile_db / "profile_generation_manifest.json").open(
+        encoding="utf-8"
+    ) as handle:
+        profile_manifest = json.load(handle)
+    with (REPOSITORY / "use_case_topologies" / "profile_config.json").open(
+        encoding="utf-8"
+    ) as handle:
+        profile_config = json.load(handle)
+    spec = read_prosumer_spec(args.profile_db / "technology_assignments_template.csv")
+    _, pv_mw, heat_demand_kw = common_gridcreator_profiles(
+        demand.index, profile_config, args.gridcreator_input, spec
+    )
+
+    design = AssignmentDesign(
+        household_seed=args.household_seed,
+        mapping_seed=args.mapping_seed,
+        random_seed_1=args.random_seed_1,
+        random_seed_2=args.random_seed_2,
+    )
+    topology_paths = find_topology_paths(args.topology_root)
+    if not topology_paths:
+        raise ValueError(f"No SimBench topology folders found in {args.topology_root}")
+
+    experiment_rows = []
+    for topology_path in topology_paths:
+        source_network = load_topology(topology_path)
+        base, scenarios = build_topology_assignments(
+            topology_path.name, source_network, profile_ids, design, QUOTAS
+        )
+        topology_output = args.output_root / topology_path.name
+        topology_output.mkdir(parents=True, exist_ok=True)
+        base.to_csv(topology_output / "base_household_assignment.csv", index=False)
+
+        for quota in QUOTAS:
+            for placement in PLACEMENTS:
+                assignment = scenarios[(quota, placement)]
+                output = topology_output / scenario_name(quota, placement)
+                prepare_output(output, args.overwrite)
+                network = load_topology(topology_path)
+                heat_demand, ev_data = add_households_and_prosumers(
+                    network,
+                    assignment,
+                    demand,
+                    occupancy,
+                    pv_mw,
+                    heat_demand_kw,
+                    spec,
+                )
+                network.export_to_csv_folder(output)
+                assignment.to_csv(output / "scenario_assignment.csv", index=False)
+                heat_demand.to_csv(output / "heat_demand.csv")
+                ev_data.to_csv(output / "ev_charging_processes.csv", index=False)
+
+                scenario_metadata = {
+                    "topology": topology_path.name,
+                    "quota_requested": quota,
+                    "quota_realized": float(assignment["quota_realized"].iloc[0]),
+                    "placement": placement,
+                    "endpoint_equivalent": bool(
+                        assignment["endpoint_equivalent"].iloc[0]
+                    ),
+                    "household_population_fixed_within_topology": True,
+                    "household_bus_mapping_fixed_within_topology": True,
+                    "prosumer_package": asdict(spec),
+                    "assignment_design": asdict(design),
+                    "profile_manifest_status": profile_manifest.get("status"),
+                }
+                with (output / "scenario_metadata.json").open(
+                    "w", encoding="utf-8"
+                ) as handle:
+                    json.dump(scenario_metadata, handle, indent=2)
+                experiment_rows.append(scenario_metadata)
+
+    pd.DataFrame(experiment_rows).to_json(
+        args.output_root / "experiment_manifest.json", orient="records", indent=2
+    )
+
+
+if __name__ == "__main__":
+    main()

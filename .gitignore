@@ -182,3 +182,7 @@ cython_debug/
 
 # cached files
 /cache
+
+# Generated topology experiment results (keep local files out of commits).
+/use_case_topologies/household_profile_database_*/
+/use_case_topologies/pypsa_scenarios/

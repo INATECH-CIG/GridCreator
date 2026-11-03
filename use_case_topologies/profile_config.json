@@ -1,0 +1,23 @@
+{
+  "weather_year": 2013,
+  "start_time": "2013-01-01 00:00:00",
+  "time_discretization_seconds": 900,
+  "bbox": {
+    "left": 7.68,
+    "bottom": 47.98,
+    "right": 7.76,
+    "top": 48.04
+  },
+  "profiles_per_household_size": {
+    "1": 32,
+    "2": 32,
+    "3": 24,
+    "4": 32,
+    "5": 16
+  },
+  "seed_start": 10000,
+  "electrical_demand_method": 2,
+  "light_configuration": 10,
+  "include_occupancy": true,
+  "output_directory": "use_case_topologies/household_profile_database_2013"
+}
