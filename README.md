@@ -66,6 +66,10 @@ The steps to be executed can be defined in `main.py` (line 223).
   - Increase number of PV systems
   - Increase heat pump penetration
   - Increase EV adoption
+- If you only want to decide the technology used, include a csv file with     boolean information on, EV, BESS, HP and PV
+  - the csv has to have the same name as the scenario
+  - it has to be inside a "technology_assignment" folder in inputs.
+  - you can choose to pass a seed for reproducibility
 
 ### Step 4 – Add Time Series
 - Run Step 4 to add time series data to the PyPSA grid.
