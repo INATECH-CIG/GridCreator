@@ -44,7 +44,7 @@ from scenario_assignment import (
 DEFAULT_PROFILE_DB = (
     REPOSITORY / "use_case_topologies" / "household_profile_database_2013"
 )
-DEFAULT_OUTPUT = REPOSITORY / "use_case_topologies" / "pypsa_scenarios"
+DEFAULT_OUTPUT = REPOSITORY / "use_case_topologies" / "pypsa_scenarios" / "EV load"
 
 
 @dataclass(frozen=True)
@@ -223,6 +223,51 @@ def add_slack(network: pypsa.Network) -> None:
     )
 
 
+def minimum_ev_battery_kwh(
+    trip_mw: pd.Series,
+    at_home: pd.Series,
+    charger_kw: float,
+    efficiency: float = 0.95,
+) -> float:
+    """Minimum usable capacity for cyclic driving and home-only charging.
+
+    This is an energy-feasibility check with freely scheduled charging and SOC
+    between zero and one. Departure SOC targets and grid constraints can impose
+    additional restrictions. Short charging stops and horizon wraparound are
+    included; increasing capacity cannot fix a total charging-energy deficit.
+    """
+    index = pd.DatetimeIndex(trip_mw.index)
+    if len(index) < 2 or index.has_duplicates or not index.is_monotonic_increasing:
+        raise ValueError("EV profiles require at least two increasing timestamps")
+    if not at_home.index.equals(trip_mw.index):
+        raise ValueError("EV driving and availability timestamps differ")
+    hours = (index[1:] - index[:-1]).total_seconds().to_numpy() / 3600.0
+    if hours[0] <= 0 or not np.allclose(hours, hours[0]):
+        raise ValueError("EV profiles require regular timestamps")
+    if not np.isfinite(charger_kw) or not 0 < charger_kw <= 11:
+        raise ValueError("EV charger power must be positive and at most 11 kW")
+    if not np.isfinite(efficiency) or not 0 < efficiency <= 1:
+        raise ValueError("EV charging efficiency must lie in (0, 1]")
+    driving = trip_mw.to_numpy(dtype=float) * 1000.0 * hours[0]
+    if not np.isfinite(driving).all() or (driving < 0).any():
+        raise ValueError("EV driving demand must be finite and nonnegative")
+    charging = at_home.astype(bool).to_numpy() * charger_kw * efficiency * hours[0]
+    if driving.sum() > charging.sum() + 1e-8:
+        raise ValueError(
+            f"No finite battery size can make this EV profile feasible: driving "
+            f"requires {driving.sum():.2f} kWh, but available home charging can "
+            f"supply at most {charging.sum():.2f} kWh over the horizon "
+            f"at {charger_kw:g} kW and {efficiency:.0%} efficiency"
+        )
+    # Maximum circular energy deficit: consumption accumulated between charging
+    # opportunities, including sequences of trips with insufficient short stops.
+    deficit = driving - charging
+    cumulative = np.concatenate(([0.0], np.cumsum(deficit)))
+    maximum = float((cumulative - np.minimum.accumulate(cumulative)).max())
+    minimum = float((cumulative - np.maximum.accumulate(cumulative)).min())
+    return max(0.0, maximum, float(deficit.sum()) - minimum)
+
+
 def ev_requests(
     profile_id: str,
     bus: str,
@@ -234,6 +279,19 @@ def ev_requests(
         occ=OccupancyAdapter(occupancy), index=occupancy.index
     )
     at_home = at_home.astype(bool)
+    try:
+        required_kwh = minimum_ev_battery_kwh(trip_mw, at_home, spec.ev_charger_kw)
+    except ValueError as exc:
+        raise ValueError(f"EV {profile_id} at bus {bus}: {exc}") from exc
+    if not np.isfinite(spec.ev_battery_kwh) or spec.ev_battery_kwh <= 0:
+        raise ValueError(f"EV {profile_id}: battery capacity must be positive and finite")
+    if spec.ev_battery_kwh + 1e-8 < required_kwh:
+        raise ValueError(
+            f"EV {profile_id} at bus {bus}: assigned battery {spec.ev_battery_kwh:g} kWh "
+            f"is too small; at least {required_kwh:.2f} kWh of usable capacity is "
+            "required for driving and available home charging. Departure SOC "
+            "targets may require additional capacity."
+        )
     departures = np.flatnonzero(at_home.shift(fill_value=True) & ~at_home)
     arrivals = np.flatnonzero(~at_home.shift(fill_value=True) & at_home)
     rows = []
@@ -360,6 +418,39 @@ def add_households_and_prosumers(
     return heat_demand, requests
 
 
+def ev_charging_load(
+    index: pd.DatetimeIndex,
+    requests: pd.DataFrame,
+    ev_ids: list[str],
+    spec: ProsumerSpec,
+    efficiency: float = 0.95,
+) -> pd.DataFrame:
+    """Grid-side MW for immediate charging, averaged over each snapshot interval.
+
+    Sessions use [Start_Time, End_Time); charging stops at the target SOC or
+    departure. The final charging interval may use less than rated power.
+    """
+    load = pd.DataFrame(0.0, index=index, columns=ev_ids)
+    step_hours = (index[1] - index[0]).total_seconds() / 3600.0
+    charger_mw = spec.ev_charger_kw / 1000.0
+    for request in requests.itertuples(index=False):
+        remaining_mwh = (
+            max(0.0, request.TargetSOC - request.StartSOC)
+            * spec.ev_battery_kwh
+            / 1000.0
+            / efficiency
+        )
+        start = index.searchsorted(request.Start_Time)
+        end = index.searchsorted(request.End_Time)
+        for position in range(start, end):
+            if remaining_mwh <= 0.0:
+                break
+            power_mw = min(charger_mw, remaining_mwh / step_hours)
+            load.iat[position, load.columns.get_loc(request.EVID)] = power_mw
+            remaining_mwh = max(0.0, remaining_mwh - power_mw * step_hours)
+    return load
+
+
 def scenario_name(quota: float, placement: str) -> str:
     return f"q{int(round(quota * 100)):03d}_{placement}"
 
@@ -428,7 +519,6 @@ def main() -> None:
             for placement in PLACEMENTS:
                 assignment = scenarios[(quota, placement)]
                 output = topology_output / scenario_name(quota, placement)
-                prepare_output(output, args.overwrite)
                 network = load_topology(topology_path)
                 heat_demand, ev_data = add_households_and_prosumers(
                     network,
@@ -439,10 +529,17 @@ def main() -> None:
                     heat_demand_kw,
                     spec,
                 )
+                prepare_output(output, args.overwrite)
                 network.export_to_csv_folder(output)
                 assignment.to_csv(output / "scenario_assignment.csv", index=False)
                 heat_demand.to_csv(output / "heat_demand.csv")
                 ev_data.to_csv(output / "ev_charging_processes.csv", index=False)
+                ev_ids = network.storage_units.index[
+                    network.storage_units["carrier"] == "ev"
+                ].tolist()
+                ev_charging_load(demand.index, ev_data, ev_ids, spec).to_csv(
+                    output / "ev_charging_load.csv"
+                )
 
                 scenario_metadata = {
                     "topology": topology_path.name,
@@ -457,6 +554,13 @@ def main() -> None:
                     "prosumer_package": asdict(spec),
                     "assignment_design": asdict(design),
                     "profile_manifest_status": profile_manifest.get("status"),
+                    "ev_charging_load": {
+                        "file": "ev_charging_load.csv",
+                        "unit": "MW",
+                        "strategy": "immediate_charging_on_arrival",
+                        "efficiency": 0.95,
+                        "columns": "EV StorageUnit names",
+                    },
                 }
                 with (output / "scenario_metadata.json").open(
                     "w", encoding="utf-8"

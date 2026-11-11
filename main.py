@@ -1,8 +1,16 @@
-#%%
+# %%
 import main_functions as mf
 import input_data as data
 import ding0_grid_generator
 import os
+
+import importlib
+import basic_plotting
+
+importlib.reload(basic_plotting)
+import osm_plotting
+
+importlib.reload(osm_plotting)
 
 import geopandas as gpd
 import pandas as pd
@@ -10,10 +18,11 @@ import pandas as pd
 import pypsa
 from enum import Enum
 
-'''
+"""
 Main module for the GridCreator tool.
 Handles the overall workflow including data preparation, grid creation, technology assignment, load profile generation.
-'''
+"""
+
 
 class CreatorStep(Enum):
     SAVE_INPUT = 0
@@ -23,19 +32,22 @@ class CreatorStep(Enum):
     ASSIGN_LOAD = 4
     PREPARE = 5
 
- #%%
-def GridCreator(top: float,
-                bottom: float,
-                left: float,
-                right: float,
-                scenario: str,
-                steps: list[CreatorStep]=[1,2,3,4,5],
-                technologies=['solar', 'E_car', 'HP'],
-                load_method: int = 0,
-                buses_df = pd.DataFrame(),
-                grid = pypsa.Network()) -> tuple:
-    '''
-    Main function for GridCreator  
+
+# %%
+def GridCreator(
+    top: float,
+    bottom: float,
+    left: float,
+    right: float,
+    scenario: str,
+    steps: list[CreatorStep] = [1, 2, 3, 4, 5],
+    technologies=["solar", "E_car", "HP"],
+    load_method: int = 0,
+    buses_df=pd.DataFrame(),
+    grid=pypsa.Network(),
+) -> tuple:
+    """
+    Main function for GridCreator
     Steps:
     0. Save input data (input_data.py)
     1. Create the grid (ding0_grid_generator.py)
@@ -43,7 +55,7 @@ def GridCreator(top: float,
     3. Assign technologies (technik_zuordnen.py, technik_fill.py, wohnungen_zuordnen.py)
     4. Assign load profiles (loads_zuordnen.py)
     5. Prepare the grid for PyPSA (pypsa_vorbereiten.py)
-    
+
     Args:
         top: Upper latitude
         bottom: Lower latitude
@@ -55,19 +67,19 @@ def GridCreator(top: float,
                                                          1: Creation of individual profiles for each household)
         buses_df: DataFrame containing buses and related data (optional, default is empty DataFrame)
                   Ability to provide pre-populated buses_df to skip step 2 or manipulated data after executing step 2
-        
+
     Returns:
         grid_1: PyPSA grid
         buses_df: DataFrame containing buses and related data (created/modified in steps 2-4)
         bbox_1: Bounding box of the selected area
         area: GeoDataFrame containing OSM area data (created in step 2)
         features: GeoDataFrame containing OSM feature data (created in step 2)
-    '''
+    """
 
     # STEP 0
     data.save_data()
-    input_path = os.path.join(os.getcwd(), 'input')
-    output_path = os.path.join(os.getcwd(), 'output', scenario)
+    input_path = os.path.join(os.getcwd(), "input")
+    output_path = os.path.join(os.getcwd(), "output", scenario)
 
     # Define bounding box
     bbox = [left, bottom, right, top]
@@ -77,15 +89,17 @@ def GridCreator(top: float,
     features = gpd.GeoDataFrame()
 
     # STEP 1
-    if 1 in steps:        
-        #Grid creation
+    if 1 in steps:
+        # Grid creation
         grid, bbox = mf.ding0_grid(bbox, input_path)
         grid.name = scenario
         # Check if pypsa network is empty
         if grid.buses.empty:
-            print("Das erzeugte Netz ist leer. Bitte überprüfen Sie die Eingabekoordinaten.")
+            print(
+                "Das erzeugte Netz ist leer. Bitte überprüfen Sie die Eingabekoordinaten."
+            )
             return grid, buses_df, bbox, area, features
-        
+
         # Return if only Step 1 is selected
         if steps[-1] == 1:
             return grid, buses_df, bbox, area, features
@@ -98,18 +112,20 @@ def GridCreator(top: float,
         if 1 not in steps:
             # step 1 might have been executed before, so we need to get the adjusted bbox
             # bbox = [left, bottom, right, top]
-            bbox_str = list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))
+            bbox_str = list(
+                pd.read_csv(os.path.join(output_path, "step_1", "bbox.csv"), header=1)
+            )
             bbox = [float(i) for i in bbox_str]
             # grid might also exist already
             grid = pypsa.Network()
-            grid.import_from_csv_folder(os.path.join(output_path, 'step_1', 'grid'))
+            grid.import_from_csv_folder(os.path.join(output_path, "step_1", "grid"))
 
         buses_df, area, features = mf.osm_data(grid, bbox, buffer)
         # Federal state data
         buses_df = mf.data_assignment(buses_df, input_path)
 
         # Return if Step 2 is the last selected step
-        if steps[-1] == 2:    
+        if steps[-1] == 2:
             return grid, buses_df, bbox, area, features
 
     # STEP 3
@@ -117,27 +133,56 @@ def GridCreator(top: float,
         if 1 not in steps:
             try:
                 grid = pypsa.Network()
-                grid.import_from_csv_folder(os.path.join(output_path, 'step_2', 'grid'))
-                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_2', 'bbox.csv'), header=1))]
-                area = gpd.read_file(os.path.join(output_path, 'step_2', 'area.gpkg'))
-                features = gpd.read_file(os.path.join(output_path, 'step_2', 'features.gpkg'))
+                grid.import_from_csv_folder(os.path.join(output_path, "step_2", "grid"))
+                bbox = [
+                    float(i)
+                    for i in list(
+                        pd.read_csv(
+                            os.path.join(output_path, "step_2", "bbox.csv"), header=1
+                        )
+                    )
+                ]
+                area = gpd.read_file(os.path.join(output_path, "step_2", "area.gpkg"))
+                features = gpd.read_file(
+                    os.path.join(output_path, "step_2", "features.gpkg")
+                )
             except:
                 try:
                     grid = pypsa.Network()
-                    grid.import_from_csv_folder(os.path.join(output_path, 'step_1', 'grid'))
-                    bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
-                    area = gpd.read_file(os.path.join(output_path, 'step_1', 'area.gpkg'))
-                    features = gpd.read_file(os.path.join(output_path, 'step_1', 'features.gpkg'))
+                    grid.import_from_csv_folder(
+                        os.path.join(output_path, "step_1", "grid")
+                    )
+                    bbox = [
+                        float(i)
+                        for i in list(
+                            pd.read_csv(
+                                os.path.join(output_path, "step_1", "bbox.csv"),
+                                header=1,
+                            )
+                        )
+                    ]
+                    area = gpd.read_file(
+                        os.path.join(output_path, "step_1", "area.gpkg")
+                    )
+                    features = gpd.read_file(
+                        os.path.join(output_path, "step_1", "features.gpkg")
+                    )
                 except:
-                    raise FileNotFoundError('Folder "grid" not found. Perform Step 1 first.')
+                    raise FileNotFoundError(
+                        'Folder "grid" not found. Perform Step 1 first.'
+                    )
         # step 2 might have been executed before, so we need to get the existing buses_df
         if 2 not in steps:
             try:
-                buses_df = pd.read_csv(os.path.join(output_path, 'step_2', 'buses.csv'), index_col=0)
+                buses_df = pd.read_csv(
+                    os.path.join(output_path, "step_2", "buses.csv"), index_col=0
+                )
             except:
-                raise FileNotFoundError('File "buses.csv" not found. Perform Step 2 first.')
+                raise FileNotFoundError(
+                    'File "buses.csv" not found. Perform Step 2 first.'
+                )
         # Define technologies
-        gcp = technologies # gcp = generation and consumption plants
+        gcp = technologies  # gcp = generation and consumption plants
         # Assign technologies
         buses_df, factor_bbox = mf.gcp_assignment(buses_df, gcp, input_path)
         buses_df = mf.appartments_assignment(buses_df)
@@ -147,40 +192,82 @@ def GridCreator(top: float,
         # Return if Step 3 is the last selected step
         if steps[-1] == 3:
             return grid, buses_df, bbox, area, features
-        
-    
+
     # STEP 4
     if 4 in steps:
         # grid might exist already, so we need to load it
         if 1 not in steps:
             try:
                 grid = pypsa.Network()
-                grid.import_from_csv_folder(os.path.join(output_path, 'step_3', 'grid'))
-                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_3', 'bbox.csv'), header=1))]
-                area = gpd.read_file(os.path.join(output_path, 'step_3', 'area.gpkg'))
-                features = gpd.read_file(os.path.join(output_path, 'step_3', 'features.gpkg'))
+                grid.import_from_csv_folder(os.path.join(output_path, "step_3", "grid"))
+                bbox = [
+                    float(i)
+                    for i in list(
+                        pd.read_csv(
+                            os.path.join(output_path, "step_3", "bbox.csv"), header=1
+                        )
+                    )
+                ]
+                area = gpd.read_file(os.path.join(output_path, "step_3", "area.gpkg"))
+                features = gpd.read_file(
+                    os.path.join(output_path, "step_3", "features.gpkg")
+                )
             except:
                 try:
                     grid = pypsa.Network()
-                    grid.import_from_csv_folder(os.path.join(output_path, 'step_2', 'grid'))
-                    bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_2', 'bbox.csv'), header=1))]
-                    area = gpd.read_file(os.path.join(output_path, 'step_2', 'area.gpkg'))
-                    features = gpd.read_file(os.path.join(output_path, 'step_2', 'features.gpkg'))
+                    grid.import_from_csv_folder(
+                        os.path.join(output_path, "step_2", "grid")
+                    )
+                    bbox = [
+                        float(i)
+                        for i in list(
+                            pd.read_csv(
+                                os.path.join(output_path, "step_2", "bbox.csv"),
+                                header=1,
+                            )
+                        )
+                    ]
+                    area = gpd.read_file(
+                        os.path.join(output_path, "step_2", "area.gpkg")
+                    )
+                    features = gpd.read_file(
+                        os.path.join(output_path, "step_2", "features.gpkg")
+                    )
                 except:
                     try:
                         grid = pypsa.Network()
-                        grid.import_from_csv_folder(os.path.join(output_path, 'step_1', 'grid'))
-                        bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_1', 'bbox.csv'), header=1))]
-                        area = gpd.read_file(os.path.join(output_path, 'step_1', 'area.gpkg'))
-                        features = gpd.read_file(os.path.join(output_path, 'step_1', 'features.gpkg'))
+                        grid.import_from_csv_folder(
+                            os.path.join(output_path, "step_1", "grid")
+                        )
+                        bbox = [
+                            float(i)
+                            for i in list(
+                                pd.read_csv(
+                                    os.path.join(output_path, "step_1", "bbox.csv"),
+                                    header=1,
+                                )
+                            )
+                        ]
+                        area = gpd.read_file(
+                            os.path.join(output_path, "step_1", "area.gpkg")
+                        )
+                        features = gpd.read_file(
+                            os.path.join(output_path, "step_1", "features.gpkg")
+                        )
                     except:
-                        raise FileNotFoundError('Folder "grid" not found. Perform Step 1 first.')
+                        raise FileNotFoundError(
+                            'Folder "grid" not found. Perform Step 1 first.'
+                        )
         if 3 not in steps:
             try:
-                buses_df = pd.read_csv(os.path.join(output_path, 'step_3', 'buses.csv'), index_col=0)
+                buses_df = pd.read_csv(
+                    os.path.join(output_path, "step_3", "buses.csv"), index_col=0
+                )
             except:
-                raise FileNotFoundError('File "buses.csv" not found. Perform Step 3 first.')
-        
+                raise FileNotFoundError(
+                    'File "buses.csv" not found. Perform Step 3 first.'
+                )
+
         # Add time series
         grid = mf.loads_assignment(grid, buses_df, bbox, input_path, load_method)
 
@@ -194,85 +281,98 @@ def GridCreator(top: float,
         if 4 not in steps:
             try:
                 grid = pypsa.Network()
-                grid.import_from_csv_folder(os.path.join(output_path, 'step_4', 'grid'))
-                bbox = [float(i) for i in list(pd.read_csv(os.path.join(output_path, 'step_4', 'bbox.csv'), header=1))]
-                area = gpd.read_file(os.path.join(output_path, 'step_4', 'area.gpkg'))
-                features = gpd.read_file(os.path.join(output_path, 'step_4', 'features.gpkg'))
-                buses_df = pd.read_csv(os.path.join(output_path, 'step_4', 'buses.csv'), index_col=0)
+                grid.import_from_csv_folder(os.path.join(output_path, "step_4", "grid"))
+                bbox = [
+                    float(i)
+                    for i in list(
+                        pd.read_csv(
+                            os.path.join(output_path, "step_4", "bbox.csv"), header=1
+                        )
+                    )
+                ]
+                area = gpd.read_file(os.path.join(output_path, "step_4", "area.gpkg"))
+                features = gpd.read_file(
+                    os.path.join(output_path, "step_4", "features.gpkg")
+                )
+                buses_df = pd.read_csv(
+                    os.path.join(output_path, "step_4", "buses.csv"), index_col=0
+                )
             except:
-                raise FileNotFoundError('Files not found. Perform Step 4 first.')
+                raise FileNotFoundError("Files not found. Perform Step 4 first.")
 
-            
         # Prepare grid for pysa.optimize()
         grid = mf.pypsa_preparation(grid)
-    
+
     return grid, buses_df, bbox, area, features
+
 
 # #%%
 examples = {
-    "Schallstadt_small": {"top":  47.96, # # Upper latitude
-                            "bottom": 47.95, # Lower latitude
-                            "left":  7.74,   # left longitude
-                            "right":  7.75   # right longitude
+    "Schallstadt_small": {
+        "top": 47.96,  # # Upper latitude
+        "bottom": 47.95,  # Lower latitude
+        "left": 7.74,  # left longitude
+        "right": 7.75,  # right longitude
     },
-    "Schallstadt_large": {"top":  47.967835, # # Upper latitude
-                            "bottom": 47.955593, # Lower latitude
-                            "left":  7.735381,   # Right longitude
-                            "right":  7.772647   # Left longitude
+    "Schallstadt_large": {
+        "top": 47.967835,  # # Upper latitude
+        "bottom": 47.955593,  # Lower latitude
+        "left": 7.735381,  # Right longitude
+        "right": 7.772647,  # Left longitude
     },
-    "Opfingen": {"top":  48.00798, # # Upper latitude
-                            "bottom": 47.99434, # Lower latitude
-                            "left":  7.70691,   # Right longitude
-                            "right":  7.72483   # Left longitude
+    "Opfingen": {
+        "top": 48.00798,  # # Upper latitude
+        "bottom": 47.99434,  # Lower latitude
+        "left": 7.70691,  # Right longitude
+        "right": 7.72483,  # Left longitude
     },
-    "Waldmünchen": {"top":  49.374518600877046, # # Upper latitude
-                            "bottom": 49.36971937206515, # Lower latitude
-                            "left":  12.697361279468392,   # Right longitude
-                            "right":  12.708888681047798  # Left longitude
+    "Waldmünchen": {
+        "top": 49.374518600877046,  # # Upper latitude
+        "bottom": 49.36971937206515,  # Lower latitude
+        "left": 12.697361279468392,  # Right longitude
+        "right": 12.708888681047798,  # Left longitude
     },
-    "2 Nodes": {"top":  49.3727, # # Upper latitude
-                            "bottom": 49.372485, # Lower latitude
-                            "left":  12.703688,   # Right longitude
-                            "right":  12.704  # Left longitude
+    "2 Nodes": {
+        "top": 49.3727,  # # Upper latitude
+        "bottom": 49.372485,  # Lower latitude
+        "left": 12.703688,  # Right longitude
+        "right": 12.704,  # Left longitude
     },
-    "South Berlin": {"top":  52.396954, # Upper latitude
-                            "bottom": 52.390330, # Lower latitude
-                            "left":  13.267724,   # Right longitude
-                            "right":  13.273824   # Left longitude
-    }
+    "South Berlin": {
+        "top": 52.396954,  # Upper latitude
+        "bottom": 52.390330,  # Lower latitude
+        "left": 13.267724,  # Right longitude
+        "right": 13.273824,  # Left longitude
+    },
 }
 
 # %%
-scenario = "South Berlin"
-steps = [1,2,3,4,5]
+scenario = "Schallstadt_large"
+steps = [1, 2, 3, 4, 5]
 
 if __name__ == "__main__":
-    
+
     top = examples[scenario]["top"]
     bottom = examples[scenario]["bottom"]
     left = examples[scenario]["left"]
     right = examples[scenario]["right"]
 
-    grid, buses, bbox, area, features = GridCreator(top,
-                                                    bottom,
-                                                    left,
-                                                    right,
-                                                    steps=steps,
-                                                    scenario=scenario,
-                                                    )
+    grid, buses, bbox, area, features = GridCreator(
+        top,
+        bottom,
+        left,
+        right,
+        steps=steps,
+        scenario=scenario,
+    )
 
-    ding0_grid_generator.save_output_data(grid,
-                                           buses,
-                                           bbox,
-                                           area,
-                                           features,
-                                           scenario=scenario,
-                                           steps=steps,
-                                           path='output')
-    
+    ding0_grid_generator.save_output_data(
+        grid, buses, bbox, area, features, scenario=scenario, steps=steps, path="output"
+    )
+
 
 # %%
-'''
+"""
 Option to create plots to visualize the results of each step for a specific scenario. The scenario can be selected via the "scenario" variable. The plots are created using the data from one specific step, which can be selected via the "step" variable. To generate all plots, at least steps 1-4 need to be executed, as the plots rely on the data generated in these steps.
 
 The plots are saved in a subfolder called "plots" within the respective scenario folder. Both .png and .pdf files are created.
@@ -280,74 +380,110 @@ The plots are saved in a subfolder called "plots" within the respective scenario
 There are basic plots in basic_plotting.py that visualize steps 1-4, as well as OSM-specific plots in osm_plotting.py that display the network diagram on an OSM map and create an interactive map.
 
 Running the plots is optional and can be controlled via the Boolean variables "plots" and "osm_plot". Similarly, saving the plots can be controlled via "save_plots" and "save_osm_plot".
-'''
+"""
 
-import importlib
-import basic_plotting  
-importlib.reload(basic_plotting)
-import osm_plotting  
-importlib.reload(osm_plotting)
+# scenario = "South Berlin"
+step = "step_5"
 
-scenario = "South Berlin"
-step = 'step_5'
+plots = False
+save_plots = False
 
-plots = True
-save_plots = True
-
-osm_plot = True
-save_osm_plot = True
+osm_plot = False
+save_osm_plot = False
 
 if plots:
-    '''
+    """
     When the grid is reloaded from a .nc file, the time series are no longer available; the data frame is instead filled with NaN values.
     Plotting Step4 therefore only works if the grid is loaded from csv files.
-    '''
+    """
     grid = pypsa.Network()
-    grid.import_from_csv_folder(os.path.join('output', scenario, step, 'grid'))
-    area = gpd.read_file(os.path.join('output', scenario, step, 'area.gpkg'))
-    features = gpd.read_file(os.path.join('output', scenario, step, 'features.gpkg'))
-    buses = pd.read_csv(os.path.join('output', scenario, step, 'buses.csv'), index_col=0)
-    zensus_path = os.path.join(os.getcwd(), 'input', 'zensus_daten', 'Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv')
+    grid.import_from_csv_folder(os.path.join("output", scenario, step, "grid"))
+    area = gpd.read_file(os.path.join("output", scenario, step, "area.gpkg"))
+    features = gpd.read_file(os.path.join("output", scenario, step, "features.gpkg"))
+    buses = pd.read_csv(
+        os.path.join("output", scenario, step, "buses.csv"), index_col=0
+    )
+    zensus_path = os.path.join(
+        os.getcwd(),
+        "input",
+        "zensus_daten",
+        "Zensus2022_Durchschn_Nettokaltmiete_Anzahl_der_Wohnungen_100m-Gitter.csv",
+    )
 
-    fig, ax = basic_plotting.plot_step1(grid, figsize=(10,10), legend_loc='upper left', bool_gridlinelabels=True)
+    fig, ax = basic_plotting.plot_step1(
+        grid, figsize=(10, 10), legend_loc="upper left", bool_gridlinelabels=True
+    )
     if save_plots:
-        fig.savefig(os.path.join('output', scenario, 'step1_grid.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, 'step1_grid.pdf'))
+        fig.savefig(os.path.join("output", scenario, "step1_grid.png"), dpi=300)
+        fig.savefig(os.path.join("output", scenario, "step1_grid.pdf"))
 
     zensus_feature = "durchschnMieteQM"
     zensus_feature_nicename = r"Average Rent in €/$m^2$"
-    fig, ax = basic_plotting.plot_step2(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
-                                        zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), legend_loc='upper left', bool_gridlinelabels=False)
+    fig, ax = basic_plotting.plot_step2(
+        grid,
+        features,
+        buses,
+        zensus_path,
+        zensus_feature=zensus_feature,
+        zensus_feature_nicename=zensus_feature_nicename,
+        figsize=(10, 10),
+        legend_loc="upper left",
+        bool_gridlinelabels=False,
+    )
     if save_plots:
-        fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, f'step2_zensus_{zensus_feature}.pdf'))
+        fig.savefig(
+            os.path.join("output", scenario, f"step2_zensus_{zensus_feature}.png"),
+            dpi=300,
+        )
+        fig.savefig(
+            os.path.join("output", scenario, f"step2_zensus_{zensus_feature}.pdf")
+        )
 
-    fig, ax = basic_plotting.plot_step3(grid, features, buses, zensus_path, zensus_feature=zensus_feature,
-                                        zensus_feature_nicename=zensus_feature_nicename, figsize=(10,10), bool_legend=True, legend_loc='upper left',
-                                        plot_trafos=True)
+    fig, ax = basic_plotting.plot_step3(
+        grid,
+        features,
+        buses,
+        zensus_path,
+        zensus_feature=zensus_feature,
+        zensus_feature_nicename=zensus_feature_nicename,
+        figsize=(10, 10),
+        bool_legend=True,
+        legend_loc="upper left",
+        plot_trafos=True,
+    )
     if save_plots:
-        fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, f'step3_technologies_{zensus_feature}.pdf'))
+        fig.savefig(
+            os.path.join(
+                "output", scenario, f"step3_technologies_{zensus_feature}.png"
+            ),
+            dpi=300,
+        )
+        fig.savefig(
+            os.path.join("output", scenario, f"step3_technologies_{zensus_feature}.pdf")
+        )
 
     fig, ax = basic_plotting.plot_step4(grid)
     if save_plots:
-        fig.savefig(os.path.join('output', scenario, 'step4_ts.png'), dpi=300)
-        fig.savefig(os.path.join('output', scenario, 'step4_ts.pdf'))
-
+        fig.savefig(os.path.join("output", scenario, "step4_ts.png"), dpi=300)
+        fig.savefig(os.path.join("output", scenario, "step4_ts.pdf"))
 
 
 if osm_plot:
     grid = pypsa.Network()
-    grid.import_from_csv_folder(os.path.join('output', scenario, step, 'grid'))
+    grid.import_from_csv_folder(os.path.join("output", scenario, step, "grid"))
 
     fig, ax = osm_plotting.plot_network_on_osm(grid)
     if save_osm_plot:
-        fig.savefig(os.path.join('output', scenario, 'network_osm.png'), dpi=300, bbox_inches='tight')
-        fig.savefig(os.path.join('output', scenario, 'network_osm.pdf'))
+        fig.savefig(
+            os.path.join("output", scenario, "network_osm.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        fig.savefig(os.path.join("output", scenario, "network_osm.pdf"))
 
     interactive = osm_plotting.plot_network_interactive(grid)
     # To view the interactive diagram, you need to open the file via File Explorer.
-    interactive.save(os.path.join('output', scenario, 'network_interactive.html'))
-    
+    interactive.save(os.path.join("output", scenario, "network_interactive.html"))
+
 
 # %%

@@ -9,11 +9,11 @@
     "top": 48.04
   },
   "profiles_per_household_size": {
-    "1": 32,
-    "2": 32,
-    "3": 24,
-    "4": 32,
-    "5": 16
+    "1": 11,
+    "2": 0,
+    "3": 1,
+    "4": 1,
+    "5": 0
   },
   "seed_start": 10000,
   "electrical_demand_method": 2,
