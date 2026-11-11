@@ -379,23 +379,41 @@ def plot_step4(grid,
     Returns:
         fig, ax: Matplotlib figure and axis objects.
     """
+    def _load_columns_for_bus(bus_name: str) -> list[str]:
+        """Return load time-series columns connected to a given bus."""
+        if grid.loads.empty or grid.loads_t.p_set.empty:
+            return []
+        bus_load_names = grid.loads.index[grid.loads['bus'] == bus_name].tolist()
+        return [col for col in bus_load_names if col in grid.loads_t.p_set.columns]
+
     if bus is None:
-        # Grouping generators by buses
-        grouped = grid.generators.groupby('bus')
-        gen_dict = {bus: grouped.get_group(bus) for bus in grouped.groups}
-        # keys with multiple generators
-        keys_multiple_gens = [key for key, value in gen_dict.items() if len(value) > 1]
-        # select the first one
-        bus = keys_multiple_gens[0]
+        # Prefer buses that have both generators and at least one load profile.
+        candidate_buses = []
+        if not grid.generators.empty:
+            grouped = grid.generators.groupby('bus')
+            gen_dict = {k: grouped.get_group(k) for k in grouped.groups}
+            candidate_buses = [k for k, v in gen_dict.items() if len(v) > 1]
+
+        bus = next((b for b in candidate_buses if _load_columns_for_bus(b)), None)
+        if bus is None:
+            # Fallback: first bus with any load profile.
+            buses_with_loads = [b for b in grid.buses.index if _load_columns_for_bus(b)]
+            if not buses_with_loads:
+                raise ValueError("No bus with load time series found in grid.loads_t.p_set.")
+            bus = buses_with_loads[0]
 
     # for one week
     end = begin + 24*7
 
     solar = f'{bus}_solar'
     hp = f'{bus}_HP'
+    load_columns = _load_columns_for_bus(bus)
+    if not load_columns:
+        raise KeyError(f"No load time series found for bus '{bus}'.")
+
     # plot of Load
     fig, ax = plt.subplots(figsize=figsize)
-    (grid.loads_t.p_set[f'{bus}_load_1'].iloc[begin:end]*1e6).plot(ax=ax, label='Load', color='green')
+    (grid.loads_t.p_set[load_columns].sum(axis=1).iloc[begin:end]*1e6).plot(ax=ax, label='Load', color='green')
     # Plot of only one week
     if solar in grid.generators.index:
         (grid.generators_t.p_max_pu[solar][begin:end]*grid.generators.at[solar, 'p_nom']*1e6).plot(ax=ax, label='Solar Generator', linestyle='-', color='orange')

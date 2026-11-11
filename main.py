@@ -3,6 +3,7 @@ import main_functions as mf
 import input_data as data
 import ding0_grid_generator
 import os
+import argparse
 
 import importlib
 import basic_plotting
@@ -33,19 +34,81 @@ class CreatorStep(Enum):
     PREPARE = 5
 
 
-# %%
-def GridCreator(
-    top: float,
-    bottom: float,
-    left: float,
-    right: float,
+def _parse_steps_arg(raw_steps: str | None, default_steps: list[int]) -> list[int]:
+    """Parse step input like '1,2,3', '[1,2,3]' or '1 2 3'."""
+    if raw_steps is None:
+        return default_steps.copy()
+
+    cleaned = raw_steps.strip().replace('[', '').replace(']', '').replace(';', ',')
+    parts = [p for p in cleaned.replace(' ', ',').split(',') if p]
+    try:
+        steps = [int(p) for p in parts]
+    except ValueError as exc:
+        raise ValueError(f"Invalid --steps value '{raw_steps}'.") from exc
+
+    invalid = [s for s in steps if s not in [1, 2, 3, 4, 5]]
+    if invalid:
+        raise ValueError(f"Invalid step(s) {invalid}. Allowed values are 1..5.")
+
+    if not steps:
+        raise ValueError("--steps must contain at least one step.")
+
+    return steps
+
+
+def _resolve_assignment_csv_path(
+    use_assignment: bool,
     scenario: str,
-    steps: list[CreatorStep] = [1, 2, 3, 4, 5],
-    technologies=["solar", "E_car", "HP"],
-    load_method: int = 0,
-    buses_df=pd.DataFrame(),
-    grid=pypsa.Network(),
-) -> tuple:
+    input_path: str,
+) -> str | None:
+    """Resolve assignment CSV as input/technology_assignment/<scenario>.csv."""
+    if not use_assignment:
+        return None
+
+    candidate = os.path.join(input_path, "technology_assignment", f"{scenario}.csv")
+
+    if not os.path.exists(candidate):
+        raise FileNotFoundError(
+            f"Technology assignment is enabled, but file not found: '{candidate}'."
+        )
+
+    return candidate
+
+
+def _parse_cli_args(default_scenario: str, default_steps: list[int]):
+    parser = argparse.ArgumentParser(description="Run GridCreator scenario.")
+    parser.add_argument("--scenario", type=str, default=default_scenario, choices=list(examples.keys()))
+    parser.add_argument(
+        "--steps",
+        type=str,
+        default=None,
+        help="Step list, e.g. '1,2,3' or '[4,5]'.",
+    )
+    parser.add_argument("--load-method", type=int, choices=[0, 1], default=0)
+    parser.add_argument(
+        "--use-technology-assignment",
+        action="store_true",
+        help="Use input/technology_assignment/<scenario>.csv for technology assignment.",
+    )
+    parser.add_argument("--technology-assignment-seed", type=int, default=None)
+    args = parser.parse_args()
+
+    parsed_steps = _parse_steps_arg(args.steps, default_steps)
+    return args, parsed_steps
+
+ #%%
+def GridCreator(top: float,
+                bottom: float,
+                left: float,
+                right: float,
+                scenario: str,
+                steps: list[CreatorStep]=[1,2,3,4,5],
+                technologies=['solar', 'E_car', 'HP'],
+                load_method: int = 0,
+                technology_assignment_csv: str | None = None,
+                technology_assignment_seed: int | None = None,
+                buses_df = pd.DataFrame(),
+                grid = pypsa.Network()) -> tuple:
     """
     Main function for GridCreator
     Steps:
@@ -65,6 +128,9 @@ def GridCreator(
         technologies: List of technologies to consider (e.g., ['solar', 'E_car', 'HP'])
         load_method: Method for load profile generation (0: Creation of 10 individual profiles for each household type, random assignment of profiles to each household type
                                                          1: Creation of individual profiles for each household)
+        technology_assignment_csv: Optional path to a CSV file with technology flags (has_pv, has_ev, has_hp, has_bess)
+                       and optional capacity columns. Rows are randomly mapped to buses.
+        technology_assignment_seed: Optional random seed for reproducible row-to-bus mapping.
         buses_df: DataFrame containing buses and related data (optional, default is empty DataFrame)
                   Ability to provide pre-populated buses_df to skip step 2 or manipulated data after executing step 2
 
@@ -188,6 +254,15 @@ def GridCreator(
         buses_df = mf.appartments_assignment(buses_df)
         # Add technology data to buses_df
         buses_df = mf.gcp_fill(buses_df, gcp, factor_bbox, input_path)
+
+        # Optional override: apply a user-provided technology assignment sheet.
+        if technology_assignment_csv is not None:
+            buses_df = mf.apply_technology_assignment_sheet(
+                buses_df,
+                technology_assignment_csv,
+                input_path,
+                random_seed=technology_assignment_seed,
+            )
 
         # Return if Step 3 is the last selected step
         if steps[-1] == 3:
@@ -347,27 +422,48 @@ examples = {
 }
 
 # %%
-scenario = "Schallstadt_large"
-steps = [1, 2, 3, 4, 5]
+scenario = "Schallstadt_small"
+steps = [1,2,3]
+
+technology_assignment_csv = None
+technology_assignment_seed = None
 
 if __name__ == "__main__":
+    cli_args, steps = _parse_cli_args(scenario, steps)
+    scenario = cli_args.scenario
+    technology_assignment_seed = cli_args.technology_assignment_seed
+    input_path = os.path.join(os.getcwd(), "input")
+    technology_assignment_csv = _resolve_assignment_csv_path(
+        cli_args.use_technology_assignment,
+        scenario,
+        input_path,
+    )
 
     top = examples[scenario]["top"]
     bottom = examples[scenario]["bottom"]
     left = examples[scenario]["left"]
     right = examples[scenario]["right"]
 
-    grid, buses, bbox, area, features = GridCreator(
-        top,
-        bottom,
-        left,
-        right,
-        steps=steps,
-        scenario=scenario,
-    )
+    grid, buses, bbox, area, features = GridCreator(top,
+                                                    bottom,
+                                                    left,
+                                                    right,
+                                                    steps=steps,
+                                                    scenario=scenario,
+                                                    load_method=cli_args.load_method,
+                                                    technology_assignment_csv=technology_assignment_csv,
+                                                    technology_assignment_seed=technology_assignment_seed,
+                                                    )
 
     ding0_grid_generator.save_output_data(
-        grid, buses, bbox, area, features, scenario=scenario, steps=steps, path="output"
+        grid,
+        buses,
+        bbox,
+        area,
+        features,
+        scenario=scenario,
+        steps=steps,
+        path="output",
     )
 
 
@@ -384,7 +480,6 @@ Running the plots is optional and can be controlled via the Boolean variables "p
 
 # scenario = "South Berlin"
 step = "step_5"
-
 plots = False
 save_plots = False
 

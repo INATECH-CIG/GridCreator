@@ -4,6 +4,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 import geopandas as gpd
+import json
 
 '''
 Module for extracting low-voltage subnetworks from a PyPSA network based on proximity to transformers.
@@ -230,6 +231,46 @@ def save_output_data(grid,
                      path='output',
                      ):
 
+    def _sanitize_for_gpkg(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Make a GeoDataFrame safe for GeoPackage export via pyogrio."""
+        if gdf.empty:
+            return gdf
+
+        safe = gdf.copy()
+        geometry_col = safe.geometry.name if safe.geometry is not None else None
+
+        # GeoPackage/SQLite treats field names case-insensitively, so avoid collisions
+        # like "fixme" and "FIXME" by renaming to unique names.
+        used_names = set()
+        renamed = {}
+        for col in safe.columns:
+            if col == geometry_col:
+                continue
+            base = str(col)
+            candidate = base
+            counter = 1
+            while candidate.lower() in used_names:
+                candidate = f"{base}_{counter}"
+                counter += 1
+            used_names.add(candidate.lower())
+            if candidate != col:
+                renamed[col] = candidate
+        if renamed:
+            safe = safe.rename(columns=renamed)
+
+        # Convert complex Python objects that OGR drivers cannot map directly.
+        for col in safe.columns:
+            if col == geometry_col:
+                continue
+            if pd.api.types.is_object_dtype(safe[col]):
+                safe[col] = safe[col].map(
+                    lambda v: json.dumps(v, ensure_ascii=True)
+                    if isinstance(v, (dict, list, tuple, set))
+                    else (str(v) if v is not None else None)
+                )
+
+        return safe
+
     output_dir = os.path.join(path, scenario, f'step_{steps[-1]}')
     os.makedirs(output_dir, exist_ok=True)
 
@@ -266,6 +307,9 @@ def save_output_data(grid,
     
     # Save features data
     if not features.empty:
-        features.to_file(os.path.join(output_dir, "features.gpkg"), driver="GPKG")
+        _sanitize_for_gpkg(features).to_file(
+            os.path.join(output_dir, "features.gpkg"),
+            driver="GPKG",
+        )
 
     print(f"Output data saved to {output_dir}")

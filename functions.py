@@ -8,8 +8,10 @@ import numpy as np
 import json
 import ast
 import random
+import time
 import xarray as xr
 import os
+import requests
 
 from pycity_base.classes.timer import Timer
 from pycity_base.classes.weather import Weather
@@ -18,6 +20,11 @@ from pycity_base.classes.environment import Environment
 
 # Import for type hints
 import pypsa
+
+try:
+    from osmnx._errors import ResponseStatusCodeError
+except Exception:  # pragma: no cover
+    ResponseStatusCodeError = Exception
 
 '''
 Skript with functions for grid creation and data combination.
@@ -80,8 +87,52 @@ def get_osm_data(bbox: list) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     'telecom': True,         # Telekommunikationseinrichtungen
     "waterway": True,         # Gewässer
     }
-    area_graph = ox.graph.graph_from_bbox(bbox, network_type="all", retain_all=True)
-    area_features = ox.features.features_from_bbox(bbox, tags=tags)
+    def _is_retryable_error(exc: Exception) -> bool:
+        retryable_markers = (
+            "502",
+            "503",
+            "504",
+            "gateway timeout",
+            "bad gateway",
+            "currently at capacity",
+            "request queue is full",
+            "timed out",
+            "timeout",
+        )
+        return isinstance(exc, (ResponseStatusCodeError, requests.exceptions.RequestException, TimeoutError, ConnectionError)) or any(
+            marker in str(exc).lower() for marker in retryable_markers
+        )
+
+    def _request_with_retry(request_fn, request_name: str, max_retries: int = 5):
+        """Retry transient Overpass failures with exponential backoff."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                return request_fn()
+            except Exception as exc:
+                if not _is_retryable_error(exc):
+                    raise
+                last_error = exc
+                if attempt >= max_retries:
+                    break
+                wait_seconds = (2 ** attempt) + random.uniform(0.0, 1.0)
+                print(
+                    f"{request_name} failed with '{exc}'. "
+                    f"Retry {attempt + 1}/{max_retries} in {wait_seconds:.1f}s..."
+                )
+                time.sleep(wait_seconds)
+        raise RuntimeError(
+            f"OSM request '{request_name}' failed after {max_retries + 1} attempts."
+        ) from last_error
+
+    area_graph = _request_with_retry(
+        lambda: ox.graph.graph_from_bbox(bbox, network_type="all", retain_all=True),
+        "graph_from_bbox",
+    )
+    area_features = _request_with_retry(
+        lambda: ox.features.features_from_bbox(bbox, tags=tags),
+        "features_from_bbox",
+    )
     return area_graph, area_features
 
 

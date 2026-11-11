@@ -251,9 +251,11 @@ def appartments_assignment(buses: pd.DataFrame) -> pd.DataFrame:
                         float(group.iloc[0]['Zensus_13undmehr_Wohnungen'])])
         if total_apartments == 0:
             # If no data is available, distribute residents evenly among nodes
-            residents_per_node = int(group.iloc[0]['Zensus_Einwohner']) / num_nodes
-            for i in group.index:
-                buses.at[i, 'Bewohnerinnen'] = residents_per_node
+            total_residents = int(group.iloc[0]['Zensus_Einwohner'])
+            base_residents = total_residents // num_nodes
+            remainder = total_residents % num_nodes
+            for pos, i in enumerate(group.index):
+                buses.at[i, 'Bewohnerinnen'] = base_residents + (1 if pos < remainder else 0)
             continue
             
         else:
@@ -343,9 +345,24 @@ def appartments_assignment(buses: pd.DataFrame) -> pd.DataFrame:
                 If no data is available, residents are distributed evenly
                 '''
 
-                res_per_apartment = int(group.iloc[0]['Zensus_Einwohner']) / apartments_assigned
-                for i in group.index:
-                    buses.at[i, 'Bewohnerinnen'] = res_per_apartment * buses.at[i, 'Haushalte']
+                total_residents = int(group.iloc[0]['Zensus_Einwohner'])
+                households = [int(buses.at[i, 'Haushalte']) for i in group.index]
+                quotas = [total_residents * h / apartments_assigned for h in households]
+                floor_alloc = [int(np.floor(q)) for q in quotas]
+                assigned = sum(floor_alloc)
+                remainder = total_residents - assigned
+
+                # Largest-remainder method keeps integer counts while preserving totals.
+                fractional_order = sorted(
+                    range(len(quotas)),
+                    key=lambda idx: (quotas[idx] - floor_alloc[idx]),
+                    reverse=True,
+                )
+                for k in range(remainder):
+                    floor_alloc[fractional_order[k % len(fractional_order)]] += 1
+
+                for idx, i in enumerate(group.index):
+                    buses.at[i, 'Bewohnerinnen'] = floor_alloc[idx]
                 continue
 
 
@@ -458,6 +475,122 @@ def gcp_fill(buses: pd.DataFrame, gcp: List[str], p_total: List[float], input_pa
     buses = func.storage(buses, storage_pv)
 
     return buses
+
+
+def apply_technology_assignment_sheet(
+    buses: pd.DataFrame,
+    assignment_csv: str,
+    input_path: str,
+    random_seed: int | None = None,
+) -> pd.DataFrame:
+    """Apply a user-defined technology sheet and randomly map rows to buses.
+
+    Expected sheet columns (case-insensitive aliases allowed):
+    - has_pv, has_ev, has_hp (or has_heat_pump), has_bess (or has_stationary_battery)
+
+    Optional capacity columns:
+    - pv_p_nom_kw, ev_charger_kw, heat_pump_p_nom_kw, battery_capacity_kwh
+    """
+
+    def _normalize(name: str) -> str:
+        return ''.join(ch for ch in str(name).lower() if ch.isalnum())
+
+    def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
+        normalized = {_normalize(c): c for c in df.columns}
+        for cand in candidates:
+            col = normalized.get(_normalize(cand))
+            if col is not None:
+                return col
+        return None
+
+    try:
+        template = pd.read_csv(assignment_csv)
+    except Exception:
+        template = pd.read_csv(assignment_csv, sep=';')
+
+    if len(template) != len(buses):
+        raise ValueError(
+            f"Technology sheet row count ({len(template)}) must match number of buses ({len(buses)})."
+        )
+
+    col_has_pv = _find_col(template, ["has_pv", "pv"])
+    col_has_ev = _find_col(template, ["has_ev", "ev"])
+    col_has_hp = _find_col(template, ["has_hp", "has_heat_pump", "hp", "heat_pump"])
+    col_has_bess = _find_col(template, ["has_bess", "has_stationary_battery", "bess", "battery"])
+
+    required = {
+        "has_pv": col_has_pv,
+        "has_ev": col_has_ev,
+        "has_hp": col_has_hp,
+        "has_bess": col_has_bess,
+    }
+    missing = [name for name, col in required.items() if col is None]
+    if missing:
+        raise ValueError(
+            "Technology sheet is missing required columns: " + ", ".join(missing)
+        )
+
+    col_pv_kw = _find_col(template, ["pv_p_nom_kw", "pv_kw"])
+    col_ev_kw = _find_col(template, ["ev_charger_kw", "ev_kw"])
+    col_hp_kw = _find_col(template, ["heat_pump_p_nom_kw", "hp_kw"])
+    col_bess_kwh = _find_col(template, ["battery_capacity_kwh", "bess_kwh", "storage_kwh"])
+
+    buses_out = buses.copy().reset_index()
+    template = template.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+
+    has_pv = pd.to_numeric(template[col_has_pv], errors='coerce').fillna(0).astype(int).clip(0, 1)
+    has_ev = pd.to_numeric(template[col_has_ev], errors='coerce').fillna(0).astype(int).clip(0, 1)
+    has_hp = pd.to_numeric(template[col_has_hp], errors='coerce').fillna(0).astype(int).clip(0, 1)
+    has_bess = pd.to_numeric(template[col_has_bess], errors='coerce').fillna(0).astype(int).clip(0, 1)
+
+    pv_plz = pd.read_csv(
+        os.path.join(input_path, "mastr_values_per_plz.csv"),
+        sep=",",
+        dtype={"PLZ": str},
+    ).set_index("PLZ")
+
+    plz_codes = buses_out["plz_code"].astype(str).str.zfill(5)
+    default_pv_kw = plz_codes.map(
+        (pv_plz["Mean_Solar_Installed_Capacity_[MW]"] * 1000).to_dict()
+    ).fillna(6.0)
+
+    if col_pv_kw is not None:
+        pv_kw = pd.to_numeric(template[col_pv_kw], errors='coerce').fillna(default_pv_kw)
+    else:
+        pv_kw = default_pv_kw
+
+    if col_ev_kw is not None:
+        ev_kw = pd.to_numeric(template[col_ev_kw], errors='coerce').fillna(11.0)
+    else:
+        ev_kw = pd.Series(11.0, index=template.index)
+
+    if col_hp_kw is not None:
+        hp_kw = pd.to_numeric(template[col_hp_kw], errors='coerce').fillna(8.0)
+    else:
+        hp_kw = pd.Series(8.0, index=template.index)
+
+    if col_bess_kwh is not None:
+        bess_kwh = pd.to_numeric(template[col_bess_kwh], errors='coerce').fillna(0.0)
+    else:
+        bess_kwh = pv_kw.copy()
+
+    buses_out["Power_solar"] = np.where(has_pv == 1, pv_kw, 0.0)
+    buses_out["Factor_solar"] = np.where(has_pv == 1, np.maximum(pv_kw, 1.0), 0.0)
+
+    buses_out["Power_E_car"] = np.where(has_ev == 1, ev_kw, 0.0)
+    buses_out["Factor_E_car"] = np.where(has_ev == 1, np.maximum(ev_kw, 1.0), 0.0)
+
+    buses_out["Power_HP"] = np.where(has_hp == 1, hp_kw, 0.0)
+    buses_out["Factor_HP"] = np.where(has_hp == 1, np.maximum(hp_kw, 1.0), 0.0)
+
+    # Required by loads_assignment for PV profile creation.
+    buses_out.loc[has_pv == 1, "Hauptausrichtung_Anteil"] = "Süd"
+    buses_out.loc[has_pv == 1, "HauptausrichtungNeigungswinkel_Anteil"] = 30
+
+    buses_out["storage"] = np.where(has_bess == 1, np.maximum(bess_kwh, 0.0), 0.0)
+
+    buses_out.set_index("name", inplace=True)
+    return buses_out
 
 
 
